@@ -1,0 +1,55 @@
+{
+  "description": "Import artifact action (import-artifact/action.yml) - verifies .dsc upload and artifact ID extraction",
+  "action": "import-artifact",
+  "tests": [
+    {
+      "name": "artifact_yaml_exists",
+      "command": "test -f artifact.yaml && echo 'exists'",
+      "expected": "exists",
+      "validation_type": "exact",
+      "description": "Verify artifact.yaml output file was created by debusine artifact import-debian"
+    },
+    {
+      "name": "artifact_yaml_not_empty",
+      "command": "test -s artifact.yaml && echo 'non-empty'",
+      "expected": "non-empty",
+      "validation_type": "exact",
+      "description": "Verify artifact.yaml is not empty"
+    },
+    {
+      "name": "artifact_yaml_has_artifact_id_key",
+      "command": "yq -r 'has(\"artifact_id\")' artifact.yaml",
+      "expected": "^true$",
+      "validation_type": "regex",
+      "description": "Verify artifact.yaml contains the artifact_id key"
+    },
+    {
+      "name": "artifact_yaml_id_is_numeric",
+      "command": "yq -r '.artifact_id' artifact.yaml",
+      "expected": "^[1-9][0-9]*$",
+      "validation_type": "regex",
+      "description": "Verify artifact_id value inside artifact.yaml is a valid positive integer"
+    },
+    {
+      "name": "artifact_id_env_is_numeric",
+      "command": "echo $ARTIFACT_ID",
+      "expected": "^[1-9][0-9]*$",
+      "validation_type": "regex",
+      "description": "Verify extracted ARTIFACT_ID env var is a valid positive integer greater than zero"
+    },
+    {
+      "name": "debusine_artifact_show_exit_code",
+      "command": "debusine artifact show --yaml $ARTIFACT_ID > /dev/null 2>&1; echo $?",
+      "expected": "^0$",
+      "validation_type": "regex",
+      "description": "Verify debusine artifact show exits with code 0 (artifact exists on server)"
+    },
+    {
+      "name": "debusine_artifact_show_id_matches",
+      "command": "debusine artifact show --yaml $ARTIFACT_ID 2>&1 | yq -r '.id'",
+      "expected": "$ARTIFACT_ID",
+      "validation_type": "env_match",
+      "description": "Verify artifact ID returned by server matches the imported ARTIFACT_ID"
+    }
+  ]
+}

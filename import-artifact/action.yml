@@ -1,0 +1,67 @@
+name: 'Import Debian Artifact'
+description: 'Upload Debian source package (.dsc) to Debusine workspace'
+
+inputs:
+  artifact_path:
+    description: 'Path to the .dsc file'
+    required: true
+  workspace:
+    description: 'Debusine workspace name'
+    required: false
+    default: 'developers'
+
+outputs:
+  artifact_id:
+    description: 'The uploaded artifact ID'
+    value: ${{ steps.extract.outputs.artifact_id }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Validate artifact
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        echo "::group::Validating artifact"
+        
+        if [ ! -f "${{ inputs.artifact_path }}" ]; then
+          echo "::error::Artifact file not found: ${{ inputs.artifact_path }}"
+          exit 1
+        fi
+        
+        if [[ ! "${{ inputs.artifact_path }}" =~ \.dsc$ ]]; then
+          echo "::error::File must have .dsc extension"
+          exit 1
+        fi
+        
+        echo "::notice::Artifact validation passed"
+        echo "::endgroup::"
+
+    - name: Import artifact
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        echo "::group::Importing artifact to Debusine"
+        
+        debusine artifact import-debian --workspace "${{ inputs.workspace }}" --yaml "${{ inputs.artifact_path }}" > artifact.yaml
+        
+        echo "::endgroup::"
+    
+    - name: Extract artifact ID
+      id: extract
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        artifact_id=$(yq -r '.artifact_id' artifact.yaml)
+        
+        if [ -z "$artifact_id" ] || [ "$artifact_id" = "null" ]; then
+          echo "::error::artifact_id not found in YAML output"
+          cat artifact.yaml
+          exit 1
+        fi
+        
+        echo "artifact_id=${artifact_id}" >> "$GITHUB_OUTPUT"
+        echo "::notice::Extracted artifact_id: ${artifact_id}"

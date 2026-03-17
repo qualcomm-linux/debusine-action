@@ -1,0 +1,55 @@
+{
+  "description": "Run workflow action (run-workflow/action.yml) - verifies workflow start, ID and URL extraction",
+  "action": "run-workflow",
+  "tests": [
+    {
+      "name": "workflowlog_has_id_key",
+      "command": "yq -r 'has(\"id\")' workflowlog.yml",
+      "expected": "^true$",
+      "validation_type": "regex",
+      "description": "Verify workflowlog.yml contains the id key"
+    },
+    {
+      "name": "workflowlog_id_is_numeric",
+      "command": "yq -r '.id' workflowlog.yml",
+      "expected": "^[1-9][0-9]*$",
+      "validation_type": "regex",
+      "description": "Verify id value inside workflowlog.yml is a valid positive integer"
+    },
+    {
+      "name": "workflow_id_env_is_numeric",
+      "command": "echo $WORKFLOW_ID",
+      "expected": "^[1-9][0-9]*$",
+      "validation_type": "regex",
+      "description": "Verify extracted WORKFLOW_ID env var is a valid positive integer greater than zero"
+    },
+    {
+      "name": "workflow_url_env_set",
+      "command": "echo $WORKFLOW_URL",
+      "expected": "^https://",
+      "validation_type": "regex",
+      "description": "Verify WORKFLOW_URL env var is set and starts with https://"
+    },
+    {
+      "name": "workflow_url_contains_workflow_id",
+      "command": "echo $WORKFLOW_URL | grep -o \"${WORKFLOW_ID}\"",
+      "expected": "^[0-9]+$",
+      "validation_type": "regex",
+      "description": "Verify WORKFLOW_URL contains the WORKFLOW_ID"
+    },
+    {
+      "name": "data_file_created",
+      "command": "ls /tmp/workflow-data-*.yml 2>/dev/null | wc -l | xargs",
+      "expected": "^[1-9][0-9]*$",
+      "validation_type": "regex",
+      "description": "Verify workflow data file was created in /tmp by run-workflow action"
+    },
+    {
+      "name": "debusine_work_request_exit_code",
+      "command": "debusine work-request show --yaml $WORKFLOW_ID > /dev/null 2>&1; echo $?",
+      "expected": "^0$",
+      "validation_type": "regex",
+      "description": "Verify workflow/work-request exists on server (exit code 0)"
+    }
+  ]
+}

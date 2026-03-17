@@ -1,0 +1,105 @@
+name: 'Run Debusine Workflow'
+description: 'Execute a Debusine workflow with specified configuration'
+
+inputs:
+  workflow_name:
+    description: 'Workflow name to execute'
+    required: true
+  workspace:
+    description: 'Debusine workspace name'
+    required: false
+    default: 'developers'
+  artifact_id:
+    description: 'Artifact ID to use in workflow'
+    required: true
+  runtime_parameters:
+    description: 'Runtime parameters as YAML string'
+    required: false
+    default: ''
+  debusine_server:
+    description: 'Debusine server URL (optional, defaults to dev.debian.qualcomm.com)'
+    required: false
+    default: 'dev.debian.qualcomm.com'
+  debusine_scope:
+    description: 'Debusine API scope (optional, defaults to debusine)'
+    required: false
+    default: 'qualcomm'
+
+outputs:
+  workflow_id:
+    description: 'The started workflow ID'
+    value: ${{ steps.extract-workflow-id.outputs.workflow_id }}
+  workflow_url:
+    description: 'The workflow URL'
+    value: ${{ steps.extract-workflow-id.outputs.workflow_url }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Generate workflow data file
+      shell: bash
+      env:
+        RUNTIME_PARAMS: ${{ inputs.runtime_parameters }}
+      run: |
+        set -euo pipefail
+        
+        echo "::group::Generating workflow data file"
+        
+        DATA_FILE="/tmp/workflow-data-${{ github.run_id }}.yml"
+        
+        cat > "$DATA_FILE" <<EOF
+        source_artifact: ${{ inputs.artifact_id }}
+        EOF
+        
+        if [ -n "$RUNTIME_PARAMS" ]; then
+          echo "$RUNTIME_PARAMS" >> "$DATA_FILE"
+        fi
+        
+        echo "::notice::Generated data file:"
+        cat "$DATA_FILE"
+        
+        echo "DATA_FILE=$DATA_FILE" >> $GITHUB_ENV
+        echo "::endgroup::"
+    
+    - name: Run workflow
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        echo "::group::Starting Debusine workflow"      
+        
+        debusine workflow start "${{ inputs.workflow_name }}" \
+          --workspace "${{ inputs.workspace }}" \
+          --data "$DATA_FILE" --yaml > workflowlog.yml
+        
+        echo "::endgroup::"
+    
+    - name: Extract workflow ID and URL
+      id: extract-workflow-id
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        workflow_id=$(yq -r '.id' workflowlog.yml)   
+        workflow_url=https://${{ inputs.debusine_server }}/${{ inputs.debusine_scope }}/${{ inputs.workspace }}/work-request/${workflow_id}
+        echo "workflow_id=${workflow_id}" >> "$GITHUB_OUTPUT"
+        echo "workflow_url=${workflow_url}" >> "$GITHUB_OUTPUT"
+        
+        echo "::notice::✓ Workflow started successfully"
+        echo "::notice::Workflow ID: #${workflow_id}"
+        [ -n "$workflow_url" ] && echo "::notice::Workflow URL: ${workflow_url}"
+        
+        {
+          echo "## 🚀 Debusine Workflow Started"
+          echo ""
+          echo "| Property | Value |"
+          echo "|----------|-------|"
+          echo "| **Workflow ID** | #${workflow_id} |"
+          echo "| **Workflow Name** | ${{ inputs.workflow_name }} |"
+          echo "| **Workspace** | ${{ inputs.workspace }} |"
+          echo "| **Artifact ID** | ${{ inputs.artifact_id }} |"          
+          echo ""
+          echo '```yaml'
+          cat "$DATA_FILE"
+          echo '```'
+        } >> $GITHUB_STEP_SUMMARY

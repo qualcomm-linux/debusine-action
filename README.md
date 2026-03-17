@@ -1,47 +1,137 @@
-**After repository creation:**
-- [ ] Update this `README.md`. Update the Project Name, description, and all sections. Remove this checklist.
-- [ ] If required, update `LICENSE.txt` and the License section with your project's approved license
-- [ ] Search this repo for "REPLACE-ME" and update all instances accordingly
-- [ ] Update `CONTRIBUTING.md` as needed
-- [ ] Review the workflows in `.github/workflows`, updating as needed. See https://docs.github.com/en/actions for information on what these files do and how they work.
-- [ ] Review and update the suggested Issue and PR templates as needed in `.github/ISSUE_TEMPLATE` and `.github/PULL_REQUEST_TEMPLATE`
+# Debusine Package Manager Action
 
-# Project Name
+A GitHub Actions composite action that automates uploading Debian source packages and triggering Debusine workflows.
 
-*\<update with your project name and a short description\>*
+---
 
-Project that does ... implemented in ... runs on Qualcomm® *\<processor\>*
+## Overview
 
-## Branches
+This action wraps three sub-actions into a single configurable step:
 
-**main**: Primary development branch. Contributors should develop submissions based on this branch, and submit pull requests to this branch.
+| Sub-action | Purpose |
+|---|---|
+| `setup` | Installs `debusine-client` and configures authentication |
+| `import-artifact` | Uploads a `.dsc` source package to a Debusine workspace |
+| `run-workflow` | Starts a named Debusine workflow with the uploaded artifact |
 
-## Requirements
-
-List requirements to run the project, how to install them, instructions to use docker container, etc...
-
-## Installation Instructions
-
-How to install the software itself.
+---
 
 ## Usage
 
-Describe how to use the project.
+```yaml
+- name: Run Debusine Package Manager
+  uses: ./.github/actions/debusine-action
+  with:
+    mode: 'upload+run'
+    debusine_token: ${{ secrets.DEBUSINE_TOKEN }}
+    artifact_path: 'path/to/package.dsc'
+    workspace: 'developers'
+    workflow_name: 'my-workflow'
+    runtime_parameters: |
+      codename: trixie
+      lintian_backend: unshare
+```
 
-## Development
+---
 
-How to develop new features/fixes for the software. Maybe different than "usage". Also provide details on how to contribute via a [CONTRIBUTING.md file](CONTRIBUTING.md).
+## Inputs
 
-## Getting in Contact
+| Input | Required | Default | Description |
+|---|---|---|---|
+| `mode` | No | `upload+run` | Execution mode (see below) |
+| `debusine_token` | **Yes** | — | Debusine API token |
+| `artifact_path` | No | — | Path to the `.dsc` file |
+| `workspace` | No | `developers` | Debusine workspace name |
+| `workflow_name` | No | — | Workflow name to execute |
+| `artifact_id` | No | `0` | Artifact ID (for `run_only` mode) |
+| `runtime_parameters` | No | `{}` | Runtime parameters as a YAML block |
+| `debusine_server` | No | `dev.debian.qualcomm.com` | Debusine server URL |
 
-How to contact maintainers. E.g. GitHub Issues, GitHub Discussions could be indicated for many cases. However a mail list or list of Maintainer e-mails could be shared for other types of discussions. E.g.
+### Modes
 
-* [Report an Issue on GitHub](../../issues)
-* [Open a Discussion on GitHub](../../discussions)
-* [E-mail us](mailto:REPLACE-ME@qti.qualcomm.com) for general questions
+| Mode | Runs Setup | Imports Artifact | Runs Workflow |
+|---|:---:|:---:|:---:|
+| `upload+run` | ✓ | ✓ | ✓ |
+| `upload_only` | ✓ | ✓ | — |
+| `run_only` | ✓ | — | ✓ |
 
-## License
+---
 
-*\<update with your project name and license\>*
+## Outputs
 
-*\<REPLACE-ME\>* is licensed under the [BSD-3-clause License](https://spdx.org/licenses/BSD-3-Clause.html). See [LICENSE.txt](LICENSE.txt) for the full license text.
+| Output | Description |
+|---|---|
+| `artifact_id` | ID of the uploaded artifact |
+| `workflow_id` | ID of the started workflow |
+| `workflow_url` | Direct URL to the workflow on the Debusine server |
+
+---
+
+## Example Workflow
+
+```yaml
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:trixie
+      options: --user root
+    steps:
+      - uses: actions/checkout@main
+        with:
+          path: .github/actions/debusine-action
+
+      - uses: ./.github/actions/debusine-action
+        id: debusine
+        with:
+          mode: 'upload+run'
+          debusine_token: ${{ secrets.DEBUSINE_TOKEN }}
+          artifact_path: 'path/to/package.dsc'
+          workspace: 'developers'
+          workflow_name: 'test-sbuild-pipe'
+          runtime_parameters: |
+            codename: trixie
+            lintian_backend: unshare
+            sbuild_backend: unshare
+
+      - run: |
+          echo "Artifact ID:  ${{ steps.debusine.outputs.artifact_id }}"
+          echo "Workflow ID:  ${{ steps.debusine.outputs.workflow_id }}"
+          echo "Workflow URL: ${{ steps.debusine.outputs.workflow_url }}"
+```
+
+---
+
+## Secrets
+
+Add the following secret to your repository under **Settings → Secrets and variables → Actions**:
+
+| Secret | Description |
+|---|---|
+| `DEBUSINE_TOKEN` | Your Debusine API authentication token |
+
+---
+
+## Tests
+
+Tests are located in `tests/` and are executed automatically as part of the `build-test.yml` workflow.
+
+```
+tests/
+├── debusine-trigger-test.sh     # Test runner
+└── test-cases/
+    ├── setup_tests.json         # Verifies installation and config
+    ├── import_artifact_tests.json  # Verifies .dsc upload and artifact ID
+    ├── run_workflow_tests.json  # Verifies workflow start and outputs
+    └── compose_tests.json       # End-to-end output consistency checks
+```
+
+To run tests manually:
+
+```bash
+cd .github/actions/debusine-action
+ARTIFACT_ID=123 
+WORKFLOW_ID=456 
+WORKFLOW_URL=https://... 
+./tests/debusine-trigger-test.sh
+```

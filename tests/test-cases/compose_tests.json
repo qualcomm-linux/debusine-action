@@ -1,0 +1,48 @@
+{
+  "description": "Wrapper composite action (action.yml) end-to-end tests - verifies all three sub-actions ran and outputs are consistent",
+  "action": "compose-tests",
+  "tests": [
+    {
+      "name": "all_output_files_present",
+      "command": "test -f artifact.yaml && test -f workflowlog.yml && echo 'all_present'",
+      "expected": "all_present",
+      "validation_type": "exact",
+      "description": "Verify both artifact.yaml and workflowlog.yml exist — confirms setup+import+run all executed"
+    },
+    {
+      "name": "artifact_id_and_workflow_id_both_set",
+      "command": "[ -n \"$ARTIFACT_ID\" ] && [ -n \"$WORKFLOW_ID\" ] && echo 'both_set' || echo 'missing'",
+      "expected": "both_set",
+      "validation_type": "exact",
+      "description": "Verify both ARTIFACT_ID and WORKFLOW_ID env vars are non-empty (wrapper passed outputs correctly)"
+    },
+    {
+      "name": "workflow_url_references_artifact",
+      "command": "echo $WORKFLOW_URL | grep -qE '^https://' && echo 'valid' || echo 'invalid'",
+      "expected": "valid",
+      "validation_type": "exact",
+      "description": "Verify WORKFLOW_URL is a valid https URL produced by the wrapper"
+    },
+    {
+      "name": "artifact_id_propagated_to_workflow",
+      "command": "cat /tmp/workflow-data-*.yml | yq -r '.source_artifact'",
+      "expected": "$ARTIFACT_ID",
+      "validation_type": "env_match",
+      "description": "Verify wrapper correctly passed import-artifact output artifact_id into run-workflow as source_artifact"
+    },
+    {
+      "name": "workflow_id_consistent_across_outputs",
+      "command": "yq -r '.id' workflowlog.yml",
+      "expected": "$WORKFLOW_ID",
+      "validation_type": "env_match",
+      "description": "Verify WORKFLOW_ID env var matches the id in workflowlog.yml — confirms wrapper output wiring is correct"
+    },
+    {
+      "name": "artifact_id_consistent_across_outputs",
+      "command": "yq -r '.artifact_id' artifact.yaml",
+      "expected": "$ARTIFACT_ID",
+      "validation_type": "env_match",
+      "description": "Verify ARTIFACT_ID env var matches artifact_id in artifact.yaml — confirms wrapper output wiring is correct"
+    }
+  ]
+}
