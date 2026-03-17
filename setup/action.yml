@@ -1,0 +1,73 @@
+name: 'Setup Debusine Environment'
+description: 'Configure Debian container with debusine-client and repository access'
+
+inputs:
+  debusine_token:
+    description: 'Debusine API Token'
+    required: true
+  debusine_server:
+    description: 'Debusine server URL (optional, defaults to dev.debian.qualcomm.com)'
+    required: false
+    default: 'dev.debian.qualcomm.com'
+  debusine_scope:
+    description: 'Debusine API scope (optional, defaults to debusine)'
+    required: false
+    default: 'qualcomm'
+runs:
+  using: 'composite'
+  steps:
+    - name: Add Debusine repository
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        echo "::group::Adding Debusine repository"
+        
+        tee /etc/apt/sources.list.d/trixie-backports.sources > /dev/null << 'EOF'
+        Types: deb 
+        URIs: http://deb.debian.org/debian 
+        Suites: trixie-backports 
+        Components: main contrib non-free non-free-firmware 
+        Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+        EOF
+
+        apt update && apt upgrade -y
+        
+        echo "::endgroup::"
+    
+    - name: Install required packages
+      shell: bash
+      run: |
+        set -euo pipefail
+        
+        echo "::group::Installing debusine-client"
+        
+        apt install -t trixie-backports debusine-client -y
+        apt install -y git yq      
+        
+        echo "::endgroup::"
+    
+    - name: Configure debusine-client
+      shell: bash
+      env:
+        DEBUSINE_TOKEN: ${{ inputs.debusine_token }}
+      run: |
+        set -euo pipefail
+        
+        echo "::group::Configuring debusine-client"
+        
+        mkdir -p ~/.config/debusine/client
+        umask 077
+
+        cat > ~/.config/debusine/client/config.ini <<EOF
+        [General]
+        default-server = ${{ inputs.debusine_server }}
+
+        [server:${{ inputs.debusine_server }}]
+        api-url = https://${{ inputs.debusine_server }}/api
+        scope = ${{ inputs.debusine_scope }}
+        token = ${DEBUSINE_TOKEN}
+        EOF
+      
+        echo "::endgroup::"
+        echo "::notice::✓ Debusine client configured successfully"

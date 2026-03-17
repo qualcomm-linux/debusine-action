@@ -1,0 +1,73 @@
+name: 'Debusine Package Manager'
+description: 'Setup Debusine environment, import artifacts, and run workflows as per the mode'
+
+inputs:
+  mode:
+    description: 'Execution mode: "upload_only" (setup + import only) or run_only (setup + run workflow) "upload+run" (setup + import + run)'
+    required: false
+    default: 'upload+run'
+  debusine_token:
+    description: 'Debusine API Token'
+    required: true
+  artifact_path:
+    description: 'Path to the .dsc file'
+    required: false
+  workspace:
+    description: 'Debusine workspace name'
+    required: false
+    default: 'developers'
+  workflow_name:
+    description: 'Workflow name to execute workflow.'
+    required: false
+  artifact_id:
+    description: 'Artifact ID to use in workflow (only for run_only mode)'
+    required: false
+    default: '0'
+  runtime_parameters:
+    description: 'Runtime parameters as JSON string'
+    required: false
+    default: '{}'
+  debusine_server:
+    description: 'Debusine server URL (optional, defaults to dev.debian.qualcomm.com)'
+    required: false
+
+outputs:
+  workflow_id:
+    description: 'The started workflow ID'
+    value: ${{ steps.run-workflow.outputs.workflow_id }}
+  workflow_url:
+    description: 'The workflow URL'
+    value: ${{ steps.run-workflow.outputs.workflow_url }}
+  artifact_id:
+    description: 'The uploaded artifact ID'
+    value: ${{ steps.import-artifact.outputs.artifact_id }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Debusine Environment      
+      uses: ./.github/actions/debusine-action/setup
+      with:
+        debusine_token: ${{ inputs.debusine_token }}
+        debusine_server: ${{ inputs.debusine_server || 'dev.debian.qualcomm.com' }}
+        debusine_scope: ${{ inputs.debusine_scope || 'qualcomm' }}
+        
+    - name: Import Debian Artifact
+      id: import-artifact    
+      if: inputs.mode == 'upload_only' || inputs.mode == 'upload+run'
+      uses: ./.github/actions/debusine-action/import-artifact
+      with:
+        artifact_path: ${{ inputs.artifact_path }}
+        workspace: ${{ inputs.workspace }}
+        
+    - name: Run Debusine Workflow
+      id: run-workflow
+      if: inputs.mode == 'upload+run' || inputs.mode == 'run_only'
+      uses: ./.github/actions/debusine-action/run-workflow
+      with:
+        workflow_name: ${{ inputs.workflow_name }}
+        workspace: ${{ inputs.workspace }}
+        artifact_id: ${{ inputs.mode == 'upload+run' && steps.import-artifact.outputs.artifact_id || inputs.artifact_id }}
+        runtime_parameters: ${{ inputs.runtime_parameters }}
+        debusine_server: ${{ inputs.debusine_server || 'dev.debian.qualcomm.com' }}
+        debusine_scope: ${{ inputs.debusine_scope || 'qualcomm' }}

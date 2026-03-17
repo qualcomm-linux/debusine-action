@@ -1,0 +1,104 @@
+{
+  "description": "Setup action (setup/action.yml) - verifies debusine-client installation and configuration",
+  "action": "setup",
+  "tests": [
+    {
+      "name": "debusine_installed",
+      "command": "which debusine",
+      "expected": "debusine",
+      "validation_type": "contains",
+      "description": "Verify debusine CLI binary is installed and in PATH"
+    },
+    {
+      "name": "debusine_version",
+      "command": "debusine --version 2>&1 | head -n1",
+      "expected": "debusine 0\\.1[0-9]\\.[0-9]+",
+      "validation_type": "regex",
+      "description": "Verify debusine CLI version is accessible and returns valid semver"
+    },
+    {
+      "name": "debusine_artifact_subcommand",
+      "command": "debusine artifact -h 2>&1 | grep -c 'import-debian'",
+      "expected": "^[1-9][0-9]*$",
+      "validation_type": "regex",
+      "description": "Verify debusine artifact subcommand includes import-debian"
+    },
+    {
+      "name": "debusine_workflow_subcommand",
+      "command": "debusine workflow -h 2>&1 | grep -c 'start'",
+      "expected": "^[1-9][0-9]*$",
+      "validation_type": "regex",
+      "description": "Verify debusine workflow subcommand includes start"
+    },
+    {
+      "name": "debusine_help_exit_code",
+      "command": "debusine -h > /dev/null 2>&1; echo $?",
+      "expected": "^0$",
+      "validation_type": "regex",
+      "description": "Verify debusine -h exits with code 0"
+    },
+    {
+      "name": "yq_installed",
+      "command": "yq --version 2>&1 | head -n1",
+      "expected": "yq",
+      "validation_type": "contains",
+      "description": "Verify yq is installed (required for YAML parsing in actions)"
+    },
+    {
+      "name": "git_installed",
+      "command": "git --version 2>&1 | head -n1",
+      "expected": "^git version",
+      "validation_type": "regex",
+      "description": "Verify git is installed"
+    },
+    {
+      "name": "config_file_exists",
+      "command": "test -f ~/.config/debusine/client/config.ini && echo 'exists'",
+      "expected": "exists",
+      "validation_type": "exact",
+      "description": "Verify debusine client config.ini file was created"
+    },
+    {
+      "name": "config_has_general_section",
+      "command": "grep -c '\\[General\\]' ~/.config/debusine/client/config.ini",
+      "expected": "^1$",
+      "validation_type": "regex",
+      "description": "Verify config.ini contains [General] section"
+    },
+    {
+      "name": "config_has_default_server",
+      "command": "grep 'default-server' ~/.config/debusine/client/config.ini | awk -F'=' '{print $2}' | xargs",
+      "expected": "^[a-zA-Z0-9._-]+$",
+      "validation_type": "regex",
+      "description": "Verify config.ini has a valid default-server entry"
+    },
+    {
+      "name": "config_has_api_url",
+      "command": "grep 'api-url' ~/.config/debusine/client/config.ini | awk -F'= ' '{print $2}' | xargs",
+      "expected": "^https://",
+      "validation_type": "regex",
+      "description": "Verify config.ini api-url starts with https://"
+    },
+    {
+      "name": "config_has_scope",
+      "command": "grep 'scope' ~/.config/debusine/client/config.ini | awk -F'= ' '{print $2}' | xargs",
+      "expected": "^[a-zA-Z0-9_-]+$",
+      "validation_type": "regex",
+      "description": "Verify config.ini has a non-empty scope value"
+    },
+    {
+      "name": "config_has_token",
+      "command": "grep 'token' ~/.config/debusine/client/config.ini | awk -F'= ' '{print $2}' | xargs",
+      "expected": "^[A-Za-z0-9]+$",
+      "validation_type": "regex",
+      "description": "Verify config.ini has a non-empty token value"
+    },
+    {
+      "name": "config_file_permissions",
+      "command": "stat -c '%a' ~/.config/debusine/client/config.ini",
+      "expected": "^6[04]0$",
+      "validation_type": "regex",
+      "description": "Verify config.ini has secure file permissions (600 or 640)"
+    }
+  ]
+}
