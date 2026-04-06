@@ -6,21 +6,6 @@ on:
   pull_request_target:
     types: [opened, synchronize, reopened]
     branches: [ main ]
-  workflow_dispatch:
-    inputs:
-      mode:
-        description: 'Execution mode'
-        required: false
-        type: choice
-        options:
-          - upload+run
-          - upload_only
-          - run_only
-        default: 'upload+run'
-      artifact_path:
-        description: 'Path to .dsc file'
-        required: false
-        default: 'path/to/package.dsc'
 
 permissions:
   contents: write
@@ -48,8 +33,8 @@ jobs:
           path: .github/actions/debusine-action
       - name: Validate inputs
         run: |
-          if [ -z "${{ secrets.DEBUSINE_TOCKEN }}" ]; then
-            echo "::error::DEBUSINE_TOCKEN secret is not set"
+          if [ -z "${{ secrets.DEBUSINE_TOKEN }}" ]; then
+            echo "::error::DEBUSINE_TOKEN secret is not set"
             exit 1
           fi
 
@@ -66,7 +51,7 @@ jobs:
         uses: ./.github/actions/debusine-action
         with:
           mode: 'upload+run'
-          debusine_token: ${{ secrets.DEBUSINE_TOCKEN }}
+          debusine_token: ${{ secrets.DEBUSINE_TOKEN }}
           artifact_path: ${{ env.TEST_DSC_PATH }}
           debusine_server: 'test.debusine.qualcomm.com'
           debusine_scope: 'qualcomm'
