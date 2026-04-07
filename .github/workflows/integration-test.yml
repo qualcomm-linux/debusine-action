@@ -1,0 +1,79 @@
+name: Integration Test (Debusine)
+
+on:
+  workflow_run:
+    workflows: ["Build Debian Package"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: read
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:trixie
+      options: --user root
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          apt-get update
+          apt-get install -y git jq yq equivs
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          path: .github/actions/debusine-action
+
+      - name: Generate test package
+        run: |
+          set -euo pipefail
+          cd /tmp
+          equivs-build -s /dev/null
+          DSC_FILE=$(ls /tmp/equivs-dummy_*.dsc | head -n1)
+          echo "TEST_DSC_PATH=${DSC_FILE}" >> $GITHUB_ENV
+
+      - name: Validate secrets
+        run: |
+          if [ -z "${{ secrets.DEBUSINE_TOKEN }}" ]; then
+            echo "::error::DEBUSINE_TOKEN secret is not set"
+            exit 1
+          fi
+
+      - name: Run Debusine Package Manager
+        id: run-debusine
+        uses: ./.github/actions/debusine-action
+        with:
+          mode: 'upload+run'
+          debusine_token: ${{ secrets.DEBUSINE_TOKEN }}
+          artifact_path: ${{ env.TEST_DSC_PATH }}
+          debusine_server: 'test.debusine.qualcomm.com'
+          debusine_scope: 'qualcomm'
+          workspace: 'dev'
+          workflow_name: 'sbuild-only'
+          runtime_parameters: |
+            codename: trixie
+
+      - name: Display outputs
+        run: |
+          set -x
+          echo "Workflow ID:   ${{ steps.run-debusine.outputs.workflow_id }}"
+          echo "Artifact ID:   ${{ steps.run-debusine.outputs.artifact_id }}"
+          echo "Workflow URL:  ${{ steps.run-debusine.outputs.workflow_url }}"
+
+      - name: Run tests
+        env:
+          WORKFLOW_ID:  ${{ steps.run-debusine.outputs.workflow_id }}
+          ARTIFACT_ID:  ${{ steps.run-debusine.outputs.artifact_id }}
+          WORKFLOW_URL: ${{ steps.run-debusine.outputs.workflow_url }}
+        working-directory: .github/actions/debusine-action
+        run: |
+          set -x
+          chmod +x tests/debusine-trigger-test.sh
+          ./tests/debusine-trigger-test.sh

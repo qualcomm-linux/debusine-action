@@ -3,103 +3,25 @@ name: Build Debian Package
 on:
   push:
     branches: [ main ]
-  pull_request_target:
+  pull_request:
     types: [opened, synchronize, reopened]
     branches: [ main ]
-  workflow_dispatch:
-    inputs:
-      mode:
-        description: 'Execution mode'
-        required: false
-        type: choice
-        options:
-          - upload+run
-          - upload_only
-          - run_only
-        default: 'upload+run'
-      artifact_path:
-        description: 'Path to .dsc file'
-        required: false
-        default: 'path/to/package.dsc'
 
 permissions:
-  contents: write
-  pull-requests: write
-  
+  contents: read
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
     container:
       image: debian:trixie
       options: --user root
-    permissions:
-      pull-requests: read
-      contents: write 
     steps:
       - name: Install git
         run: |
           set -euo pipefail
           apt-get update
-          apt-get install -y git jq yq equivs
+          apt-get install -y git jq yq
+
       - name: Checkout repository
-        uses: actions/checkout@main
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          path: .github/actions/debusine-action
-      - name: Validate inputs
-        run: |
-          if [ -z "${{ secrets.DEBUSINE_TOCKEN }}" ]; then
-            echo "::error::DEBUSINE_TOCKEN secret is not set"
-            exit 1
-          fi
-
-      - name: Generate test package
-        run: |
-          set -euo pipefail
-          cd /tmp
-          equivs-build -s /dev/null
-          DSC_FILE=$(ls equivs-dummy_*.dsc | head -n1)
-          echo "TEST_DSC_PATH=/tmp/${DSC_FILE}" >> $GITHUB_ENV
-
-      - name: Run Debusine Package Manager
-        id: run-debusine
-        uses: ./.github/actions/debusine-action
-        with:
-          mode: 'upload+run'
-          debusine_token: ${{ secrets.DEBUSINE_TOCKEN }}
-          artifact_path: ${{ env.TEST_DSC_PATH }}
-          debusine_server: 'test.debusine.qualcomm.com'
-          debusine_scope: 'qualcomm'
-          workspace: 'dev'
-          workflow_name: 'sbuild-only'
-          runtime_parameters: |
-            codename: trixie
-
-      - name: Set output variables
-        run: |
-          set -x
-          WORKFLOW_ID="${{ steps.run-debusine.outputs.workflow_id }}"
-          ARTIFACT_ID="${{ steps.run-debusine.outputs.artifact_id }}"
-          WORKFLOW_URL="${{ steps.run-debusine.outputs.workflow_url }}"
-          
-          echo "workflow_id=${WORKFLOW_ID:-N/A}" >> $GITHUB_OUTPUT
-          echo "artifact_id=${ARTIFACT_ID:-N/A}" >> $GITHUB_OUTPUT
-          echo "workflow_url=${WORKFLOW_URL:-N/A}" >> $GITHUB_OUTPUT
-          
-      - name: Display outputs (from composite)
-        run: |
-          set -x
-          echo "Workflow ID:   ${{ steps.run-debusine.outputs.workflow_id }}"
-          echo "Artifact ID:   ${{ steps.run-debusine.outputs.artifact_id }}"
-          echo "Workflow URL:  ${{ steps.run-debusine.outputs.workflow_url }}"
-
-      - name: Run tests
-        env:
-          WORKFLOW_ID:  ${{ steps.run-debusine.outputs.workflow_id }}
-          ARTIFACT_ID:  ${{ steps.run-debusine.outputs.artifact_id }}
-          WORKFLOW_URL: ${{ steps.run-debusine.outputs.workflow_url }}
-        working-directory: .github/actions/debusine-action
-        run: |
-          set -x
-          chmod +x tests/debusine-trigger-test.sh
-          ./tests/debusine-trigger-test.sh
+        uses: actions/checkout@v6
