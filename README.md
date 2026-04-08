@@ -127,3 +127,14 @@ tests/
     ├── import_artifact_tests.json  # Verifies .dsc upload and artifact ID
     └── run_workflow_tests.json     # Verifies workflow start and outputs
 ```
+
+## Getting in Contact
+
+If you have questions, suggestions, or issues related to this project, there are several ways to reach out:
+
+* [Report an Issue on GitHub](../../issues)
+* [E-mail us](mailto:vrokad@qti.qualcomm.com,lint.core@qti.qualcomm.com) for general questions
+
+## License
+
+debusine-action is licensed under the [BSD-3-Clause-Clear License](https://spdx.org/licenses/BSD-3-Clause-Clear.html). See [LICENSE.txt](LICENSE.txt) for the full license text.
