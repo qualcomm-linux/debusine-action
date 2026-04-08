@@ -44,8 +44,9 @@ This action wraps three sub-actions into a single configurable step:
 | `workspace` | No | `developers` | Debusine workspace name |
 | `workflow_name` | No | — | Workflow name to execute |
 | `artifact_id` | No | `0` | Artifact ID (for `run_only` mode) |
-| `runtime_parameters` | No | `{}` | Runtime parameters as a YAML block |
+| `runtime_parameters` | No | — | Runtime parameters as a YAML block |
 | `debusine_server` | No | `dev.debian.qualcomm.com` | Debusine server URL |
+| `debusine_scope` | No | `qualcomm` | Debusine API scope |
 
 ### Modes
 
@@ -89,6 +90,8 @@ jobs:
           artifact_path: 'path/to/package.dsc'
           workspace: 'developers'
           workflow_name: 'test-sbuild-pipe'
+          debusine_server: 'dev.debian.qualcomm.com'
+          debusine_scope: 'qualcomm'
           runtime_parameters: |
             codename: trixie
             lintian_backend: unshare
@@ -118,20 +121,9 @@ Tests are located in `tests/` and are executed automatically as part of the `bui
 
 ```
 tests/
-├── debusine-trigger-test.sh     # Test runner
+├── debusine-trigger-test.sh        # Test runner
 └── test-cases/
-    ├── setup_tests.json         # Verifies installation and config
+    ├── setup_tests.json            # Verifies installation and config
     ├── import_artifact_tests.json  # Verifies .dsc upload and artifact ID
-    ├── run_workflow_tests.json  # Verifies workflow start and outputs
-    └── compose_tests.json       # End-to-end output consistency checks
-```
-
-To run tests manually:
-
-```bash
-cd .github/actions/debusine-action
-ARTIFACT_ID=123 
-WORKFLOW_ID=456 
-WORKFLOW_URL=https://... 
-./tests/debusine-trigger-test.sh
+    └── run_workflow_tests.json     # Verifies workflow start and outputs
 ```
