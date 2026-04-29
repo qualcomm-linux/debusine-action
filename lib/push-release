@@ -1,0 +1,45 @@
+#!/bin/sh
+set -ex
+
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# Import the commit and tag saved previously by lib/prepare-release. Add a
+# further commit to "open" development of the next release by adding a new
+# UNRELEASED entry to d/changelog. Then push the tag and these two commits back
+# to the origin repository.
+
+# Dependencies:
+#   git dpkg-parsechangelog dch
+
+# Inputs:
+#   $RELEASE_TAG
+#   Checked out branch in $PWD/srcpkg/ directory (without release commit/tag)
+#   release.bundle (containing release commit and tag)
+
+# Outputs:
+#   `git push origin`
+
+cd srcpkg
+# Must not be UNRELEASED
+release_ref=$(git bundle list-heads ../release.bundle|awk '{print $2}')
+git fetch ../release.bundle "${release_ref}:${release_ref}"
+git merge --ff "$release_ref"
+if [ "$(dpkg-parsechangelog -SDistribution)" = "UNRELEASED" ]; then
+    echo "Cannot release: d/changelog reports UNRELEASED" >&2
+    exit 1
+fi
+
+previous_version=$(dpkg-parsechangelog -SVersion)
+next_version=$(../debusine-action/lib/next_qcom_version "$previous_version")
+case "$next_version" in
+    *~) next_dev_version="$next_version" ;;
+    *) next_dev_version="${next_version}~" ;;
+esac
+dch -b -v "$next_dev_version" 'Unreleased changes'
+export GIT_AUTHOR_NAME="Release Bot"
+export GIT_AUTHOR_EMAIL="noreply@example.com"
+export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
+export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
+git commit -m"d/changelog: open $next_version" debian/changelog
+git push origin "$release_ref" "$(git symbolic-ref HEAD)"

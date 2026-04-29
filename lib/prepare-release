@@ -1,0 +1,53 @@
+#!/bin/sh
+set -ex
+
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# Locally add a commit and tag that adjusts d/changelog for release by changing
+# the distribution from UNRELEASED to the target suite. Save the commit and tag
+# in a git bundle in ../release.bundle so that if tests pass, this commit and
+# tag can be pushed officially later.
+
+# Dependencies:
+#   dpkg-parsechangelog, dch, gbp, git
+
+# Inputs:
+#   $SUITE
+#   Checked out source tree in $PWD/srcpkg
+
+# Outputs:
+#   release.bundle: contains release tag and associated commit
+#   Repository will be checked out at the release tag
+
+tmpdir=$(mktemp -d)
+cleanup() { rm -rf "$tmpdir"; }
+trap cleanup EXIT
+
+cd srcpkg
+
+# Must be UNRELEASED
+if [ "$(dpkg-parsechangelog -SDistribution)" != "UNRELEASED" ]; then
+    echo "Cannot release: d/changelog does not report UNRELEASED" >&2
+    exit 1
+fi
+
+# Drop any ~ suffix
+original_version=$(dpkg-parsechangelog -SVersion)
+final_release_version=${original_version%\~}
+dch -v "$final_release_version" ''
+
+# Release
+if [ "$SUITE" = "sid" ]; then
+    SUITE=unstable
+fi
+dch -r -D "$SUITE" --force-distribution ''
+
+export GIT_AUTHOR_NAME="Release Bot"
+export GIT_AUTHOR_EMAIL="noreply@example.com"
+export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
+export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
+git commit -m"d/changelog: release $final_release_version" debian/changelog
+
+gbp tag --ignore-branch --posttag='echo $GBP_TAG > '"$tmpdir/release-tag"
+git bundle create ../release.bundle "HEAD^..refs/tags/$(cat "$tmpdir/release-tag")"

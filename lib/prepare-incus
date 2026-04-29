@@ -1,0 +1,31 @@
+#!/bin/sh
+set -ex
+
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# Prepare environment to run Incus
+
+# Run on the host
+
+# Dependencies:
+#   None
+
+# Inputs:
+#   None
+
+# Outputs:
+#   None
+
+echo ""::group::Prepare Incus""
+# The default Docker installation steps on iptables and clobbers Incus
+# networking in the process, so remove it and reset iptables
+sudo dpkg -P docker-ce docker-ce-cli
+sudo iptables -t nat -F
+sudo iptables -F
+sudo iptables -P FORWARD ACCEPT
+
+sudo apt-get --update install incus
+sudo systemctl enable --now incus.socket
+sudo incus admin init --auto
+echo "::endgroup::"

@@ -1,0 +1,215 @@
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+name: Debusine CI
+
+on:
+  workflow_call:
+    inputs:
+      target_branch:
+        description: Where the packaging will land (or for dailies, has landed)
+        type: string
+        required: true
+      source_ref:
+        description: What packaging to test. Defaults to using github.ref.
+        type: string
+        required: false
+      release:
+        description: Run release step
+        type: boolean
+        required: true
+        default: true
+      job_index:
+        # This is used to generate a unique Debusine child workspace name for
+        # each expansion of the matrix
+        description: Uniquely identifying index for matrix strategies
+        type: string
+        required: false
+        default: "0"
+    secrets:
+      DEBUSINE_USER:
+        required: true
+      DEBUSINE_TOKEN:
+        required: true
+      DEBUSINE_RELEASE_TOKEN:
+        required: true
+
+# Release runs for the same branch share a group (preventing concurrent
+# releases), while non-release runs get unique groups (allowing concurrent
+# execution)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.target_branch }}-${{ inputs.release && 'release' || github.run_id }}
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    outputs:
+      suite: ${{ steps.map_suite.outputs.suite }}
+      source_ref: ${{ steps.determine_checkout_ref.outputs.source_ref }}
+      workspace: ${{ steps.build.outputs.workspace }}
+      srcpkg_name: ${{ steps.build.outputs.srcpkg_name }}
+      srcpkg_version: ${{ steps.build.outputs.srcpkg_version }}
+    steps:
+      - id: map_suite
+        name: Map branch to suite
+        uses: actions/github-script@v9
+        env:
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+        with:
+          script: |
+            const suiteMap = {
+              "qcom/debian/latest": "forky",
+              "qcom/debian/trixie": "trixie",
+            };
+
+            const targetBranch = process.env.TARGET_BRANCH;
+            const suite = suiteMap[targetBranch];
+
+            if (!suite) {
+              core.setFailed(`Unknown target branch: ${targetBranch}. Valid branches are: ${Object.keys(suiteMap).join(', ')}`);
+              return;
+            }
+
+            core.setOutput('suite', suite);
+            core.info(`Mapped branch '${targetBranch}' to suite '${suite}'`);
+      - id: determine_checkout_ref
+        name: Determine the ref of the packaging to build
+        uses: actions/github-script@v9
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+        with:
+          script: |
+            const sourceRef = process.env.SOURCE_REF;
+            let ref;
+            if (sourceRef) {
+              // Explicit override from caller (e.g. schedule + matrix)
+              ref = sourceRef;
+            } else if (context.eventName === 'pull_request') {
+              // PR: use head SHA, not refs/pull/*/merge
+              ref = context.payload.pull_request.head.sha;
+            } else {
+              // push / workflow_dispatch / schedule default
+              ref = context.ref;
+            }
+            core.setOutput('source_ref', ref);
+            core.info(`Using source_ref '${ref}'`);
+      - uses: actions/checkout@v6
+        with:
+          # Using the parent directory for Debian build artifacts is problematic, for example breaking actions/upload-artifact:
+          # https://github.com/actions/upload-artifact/issues/176
+          path: srcpkg
+          ref: ${{ steps.determine_checkout_ref.outputs.source_ref }}
+      - uses: actions/checkout@v6
+        with:
+          repository: qualcomm-linux/debusine-action
+          ref: main
+          path: debusine-action
+      - id: build
+        name: Build
+        env:
+          RELEASE: ${{ inputs.release }}
+          SUITE: ${{ steps.map_suite.outputs.suite }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          JOB_INDEX: ${{ inputs.job_index }}
+          DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
+          DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE}}
+          DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
+          DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
+        run: |
+          set -ex
+
+          debusine-action/lib/prepare-incus
+          debusine-action/lib/prepare-debusine
+
+          if [ "$RELEASE" = "true" ]; then
+            echo "::group::Prepare release"
+            sudo apt-get install --update --no-install-recommends -y devscripts dpkg-dev git-buildpackage
+            SUITE="$SUITE" debusine-action/lib/prepare-release
+            echo "::endgroup::"
+          fi
+
+          echo "::group::Generate source package"
+          sudo apt-get install --update --no-install-recommends -y devscripts dctrl-tools
+          SUITE="$SUITE" debusine-action/lib/generate-source-package
+          dcmd sudo incus file push *.changes debusine/root/
+          echo "::endgroup::"
+
+          sudo incus exec debusine env \
+            "GITHUB_REPOSITORY_ID=$GITHUB_REPOSITORY_ID" \
+            "GITHUB_RUN_ID=$GITHUB_RUN_ID" \
+            "GITHUB_RUN_ATTEMPT=$GITHUB_RUN_ATTEMPT" \
+            "JOB_INDEX=$JOB_INDEX" \
+            "DEBUSINE_HOST=$DEBUSINE_HOST" \
+            "DEBUSINE_SCOPE=$DEBUSINE_SCOPE" \
+            "DEBUSINE_USER=$DEBUSINE_USER" \
+            "DEBUSINE_TOKEN=$DEBUSINE_TOKEN" \
+            "SUITE=$SUITE" \
+            debusine-action/lib/build
+          sudo incus exec debusine cat output >> "$GITHUB_OUTPUT"
+      - name: Note Debusine workspace URL
+        env:
+          WORKSPACE_URL: ${{ steps.build.outputs.url }}
+        run: |
+          echo "Debusine Workspace URL: $WORKSPACE_URL" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload release bundle
+        if: ${{ inputs.release }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-bundle
+          path: release.bundle
+          if-no-files-found: error
+
+  release:
+    name: Release
+    if: ${{ inputs.release }}
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment: Production
+    permissions:
+      contents: write
+      deployments: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Using the parent directory for Debian build artifacts is problematic, for example breaking actions/upload-artifact:
+          # https://github.com/actions/upload-artifact/issues/176
+          path: srcpkg
+          ref: ${{ needs.build.outputs.source_ref }}
+      - uses: actions/checkout@v6
+        with:
+          repository: qualcomm-linux/debusine-action
+          ref: main
+          path: debusine-action
+      - name: Download release bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: release-bundle
+      - name: Release
+        env:
+          DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
+          DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE}}
+          DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_RELEASE_TOKEN }}
+          DEBUSINE_CI_WORKSPACE: ${{ needs.build.outputs.workspace }}
+          SRCPKG_NAME: ${{ needs.build.outputs.srcpkg_name }}
+          SRCPKG_VERSION: ${{ needs.build.outputs.srcpkg_version}}
+          SUITE: ${{ needs.build.outputs.suite }}
+        run: |
+          set -ex
+
+          sudo apt-get install --update --no-install-recommends -y devscripts dpkg-dev python3
+          debusine-action/lib/prepare-incus
+          debusine-action/lib/prepare-debusine
+          sudo incus exec debusine env \
+            "DEBUSINE_HOST=$DEBUSINE_HOST" \
+            "DEBUSINE_SCOPE=$DEBUSINE_SCOPE" \
+            "DEBUSINE_TOKEN=$DEBUSINE_TOKEN" \
+            "DEBUSINE_CI_WORKSPACE=$DEBUSINE_CI_WORKSPACE" \
+            "SRCPKG_NAME=$SRCPKG_NAME" \
+            "SRCPKG_VERSION=$SRCPKG_VERSION" \
+            "SUITE=$SUITE" \
+            debusine-action/lib/release
+
+          debusine-action/lib/push-release

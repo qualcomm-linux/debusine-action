@@ -1,0 +1,61 @@
+#!/bin/sh
+set -ex
+
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# Convert a source tree from a git repository into a Debian source package.
+
+# Usually this would be just `dpkg-buildpackage -S`, but we have some packages
+# that require more specialist pre-build steps. The required steps should be as
+# straightforward and aligned with Debian Developer expectations as we can
+# achieve. This script should contain all the knowledge required to build
+# source packages from these exceptional source trees.
+
+# The `dpkg-buildpackage -S` step is specifically done inside a container that
+# matches the target suite in case there are nuances that break when not done
+# this way.
+
+# This script should run from a host system with Incus available. It will do
+# the work inside a container as needed.
+
+# Run on the host
+
+# Dependencies:
+#     incus (configured)
+#     devscripts
+#     dctrl-tools
+
+# Inputs:
+#     $PWD/srcpkg/: checked out source tree
+#     $SUITE: target suite to prepare in (eg. 'trixie')
+
+# Outputs:
+#     Parent directory: .changes files for source package together with all
+#         referenced files
+#     $GITHUB_OUTPUT (append): srcpkg_name, srcpkg_version
+
+# A couple of things we might want to implement in the future:
+# 1. Run as a normal user, not root
+# 2. Install build dependencies before building the source package
+
+echo "::group::Prepare source package"
+sudo incus launch "images:debian/$SUITE" srcbuild
+sudo incus file push -r srcpkg srcbuild/root/
+sudo incus exec srcbuild -- sh - <<END
+set -ex
+apt-get install --update --no-install-recommends -y dpkg-dev
+cd srcpkg
+dpkg-buildpackage -S -d -nc
+END
+changes_file=$(sudo incus exec srcbuild -- sh -c 'echo *.changes')
+sudo incus file pull "srcbuild/root/$changes_file" .
+for another_file in $(dcmd --no-changes echo "$changes_file"); do
+    sudo incus file pull "srcbuild/root/$another_file" .
+done
+
+cat >> "$GITHUB_OUTPUT" <<END
+srcpkg_name=$(grep-dctrl -nsSource . *.dsc)
+srcpkg_version=$(grep-dctrl -nsVersion . *.dsc)
+END
+echo "::endgroup::"

@@ -1,0 +1,35 @@
+#!/bin/sh
+set -ex
+
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# Prepare the container to run the Debusine client
+
+# Run on the host
+
+# Dependencies:
+#   incus (configured)
+
+# Inputs:
+#   None
+
+# Outputs:
+#   `debusine` incus container (without Debusine configured)
+
+echo "::group::Prepare debusine container"
+sudo incus launch images:debian/trixie debusine
+sudo incus exec debusine mkdir debusine-action
+sudo incus file push -r debusine-action/lib debusine/root/debusine-action/
+sudo incus exec debusine sh - <<END2
+set -ex
+cat > /etc/apt/sources.list.d/trixie-backports.sources <<END
+Types: deb 
+URIs: http://deb.debian.org/debian 
+Suites: trixie-backports 
+Components: main
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+END
+apt-get --update install --no-install-recommends -y curl dctrl-tools debusine-client/trixie-backports dpkg-dev git python3-debusine/trixie-backports python3-tenacity python3-yaml yq
+END2
+echo "::endgroup::"
