@@ -1,0 +1,71 @@
+#!/bin/bash
+set -eux
+set -o pipefail
+
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# Send a source package to Debusine for building and wait for build completion
+
+# Run inside the container created with `debusine-action/lib/prepare-debusine`
+
+# Dependencies:
+#   `debusine` incus container (Debusine will be configured)
+
+# Inputs:
+#   GITHUB_REPOSITORY_ID
+#   GITHUB_RUN_ID
+#   GITHUB_RUN_ATTEMPT
+#   JOB_INDEX
+#   DEBUSINE_HOST
+#   DEBUSINE_SCOPE
+#   DEBUSINE_TOKEN
+#   SUITE
+#   .dsc file in current directory
+
+# Outputs:
+#   Output file `output` suitable for $GITHUB_OUTPUT containing `workspace`
+
+echo "::group::Build in Debusine"
+
+child_ci_suffix=gh-${GITHUB_REPOSITORY_ID}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${JOB_INDEX}
+workspace="ci-${child_ci_suffix}"
+
+mkdir -p ~/.config/debusine/client
+( umask 077; cat > ~/.config/debusine/client/config.ini <<EOF
+[General]
+default-server = default
+
+[server:default]
+api-url = https://${DEBUSINE_HOST}/api
+scope = ${DEBUSINE_SCOPE}
+token = ${DEBUSINE_TOKEN}
+default-workspace = $workspace
+EOF
+)
+
+workflow_id=$(echo "suffix: $child_ci_suffix"|debusine workflow start -w ci --yaml create-child-workspace|yq -r .id)
+debusine-action/lib/poll_workflow.py "$workflow_id"
+debusine archive suite create --architecture all --architecture amd64 --architecture arm64 ${SUITE}
+debusine workflow-template create debian_pipeline debian-pipeline <<END
+static_parameters:
+  vendor: debian
+  sbuild_environment_variant: buildd
+  # We do want to enable debusine QA, but to get going for now, defer this for later
+  # enable_check_installability: false this one is documented but not recognised
+  enable_autopkgtest: false
+  enable_lintian: false
+  enable_piuparts: false
+  enable_blhc: false
+  codename: $SUITE
+  suite: $SUITE@debian:suite
+runtime_parameters:
+  source_artifact: any
+END
+artifact_id=$(debusine artifact import-debian --yaml *.dsc|yq -r .artifact_id)
+workflow_id=$(echo "source_artifact: ${artifact_id}@artifacts"|debusine workflow start --yaml debian-pipeline|yq -r .id)
+debusine-action/lib/poll_workflow.py "$workflow_id"
+
+echo "workspace=$workspace" > output
+echo "url=https://${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${workspace}/" >> output
+echo "::endgroup::"

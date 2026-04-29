@@ -1,0 +1,42 @@
+#!/bin/sh
+set -ex
+
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# Generates the files in the current directory for dropping into the target
+# system:
+
+# Run on the host
+
+# Dependencies:
+#   ca-certificates and curl packages: when you run this script
+#   ca-certificates: on the target system since HTTPS is used
+
+# Inputs:
+#   DEBUSINE_HOST
+#   DEBUSINE_SCOPE
+#   DEBUSINE_USER
+#   DEBUSINE_TOKEN
+#   DEBUSINE_WORKSPACE
+#   SUITE
+
+# Outputs:
+#   debusine-ci.sources: to drop into /etc/apt/sources.list.d/
+#   debusine-ci-auth.conf: to drop into /etc/apt/auth.conf.d/
+
+public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
+cat > debusine-ci.sources <<END
+Types: deb deb-src
+URIs: https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/
+Suites: ${SUITE}
+Components: main
+Signed-By:
+${public_key}
+END
+( umask 077; cat > debusine-ci-auth.conf <<END
+machine deb.${DEBUSINE_HOST}
+login ${DEBUSINE_USER}
+password ${DEBUSINE_TOKEN}
+END
+)

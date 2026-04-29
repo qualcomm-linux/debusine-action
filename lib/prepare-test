@@ -1,0 +1,40 @@
+#!/bin/sh
+set -ex
+
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# Prepare a test environment for a build that is ready to test in Debusine
+
+# In this example, we use a container for testing, so we create the container
+# and configure it with apt. The script lib/generate-apt-config generates the apt
+# configuration for us that points into Debusine. Then we copy that
+# configuration into the container.
+
+# In a real implementation, one would still run lib/generate-apt-config, and then
+# how to set up the system under test accordingly.
+
+# See the comments in lib/generate-apt-config to understand its inputs, outputs
+# and dependencies.
+
+# Run on the host
+
+# Dependencies:
+#   incus (configured)
+#   Dependencies of lib/generate-apt-config
+
+# Inputs:
+#   $SUITE
+#   Inputs of lib/generate-apt-config
+
+# Outputs:
+#   None
+
+echo "::group::Prepare test container"
+debusine-action/lib/generate-apt-config
+sudo incus launch "images:debian/$SUITE" test
+sudo incus exec test -- apt-get install --update --no-install-recommends -y ca-certificates
+sudo incus file push debusine-ci.sources test/etc/apt/sources.list.d/
+sudo incus file push debusine-ci-auth.conf test/etc/apt/auth.conf.d/
+sudo incus exec test apt-get update
+echo "::endgroup::"
