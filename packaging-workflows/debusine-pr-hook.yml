@@ -1,0 +1,36 @@
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# SEE README.debusine.md BEFORE CHANGING THIS FILE
+
+# Note: in addition to the default branch, this workflow file must also be
+# copied into each packaging branch in order to function as intended.
+
+name: Debusine PR Hook
+
+on:
+  pull_request:
+    branches:
+      - 'qcom/debian/**'
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  set-pending-status:
+    name: Create Debusine CI Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set pending status
+        uses: actions/github-script@v9
+        with:
+          script: |
+            await github.rest.repos.createCommitStatus({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              sha: context.payload.pull_request.head.sha,
+              state: 'pending',
+              context: 'Debusine CI',
+              description: 'Running Debusine CI...'
+            });
