@@ -29,7 +29,7 @@ set -o pipefail
 echo "::group::Build in Debusine"
 
 child_ci_suffix=gh-${GITHUB_REPOSITORY_ID}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${JOB_INDEX}
-workspace="ci-${child_ci_suffix}"
+workspace="qli-ci-${child_ci_suffix}"
 
 mkdir -p ~/.config/debusine/client
 ( umask 077; cat > ~/.config/debusine/client/config.ini <<EOF
@@ -44,7 +44,7 @@ default-workspace = $workspace
 EOF
 )
 
-workflow_id=$(echo "suffix: $child_ci_suffix"|debusine workflow start -w ci --yaml create-child-workspace|yq -r .id)
+workflow_id=$(echo "suffix: $child_ci_suffix"|debusine workflow start -w qli-ci --yaml create-child-workspace|yq -r .id)
 debusine-action/lib/poll_workflow.py "$workflow_id"
 debusine archive suite create --architecture all --architecture amd64 --architecture arm64 ${SUITE}
 debusine workflow-template create debian_pipeline debian-pipeline <<END

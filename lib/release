@@ -5,7 +5,7 @@ set -o pipefail
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
-# Release a Debusine build from a ci child workspace into the Debusine prod
+# Release a Debusine build from a ci child workspace into the Debusine qli
 # workspace
 
 # Run inside the container created with `lib/prepare-debusine`
@@ -25,7 +25,7 @@ set -o pipefail
 # Outputs:
 #   None
 
-echo "::group::Release to Debusine prod"
+echo "::group::Release to Debusine qli"
 
 mkdir -p ~/.config/debusine/client
 ( umask 077; cat > ~/.config/debusine/client/config.ini <<EOF
@@ -36,7 +36,7 @@ default-server = default
 api-url = https://${DEBUSINE_HOST}/api
 scope = ${DEBUSINE_SCOPE}
 token = ${DEBUSINE_TOKEN}
-default-workspace = prod
+default-workspace = qli
 EOF
 )
 
@@ -50,7 +50,7 @@ suite_id=$(
       end
   '
 )
-workflow_id=$(debusine workflow start -w prod --yaml package-publish <<END|yq -r .id
+workflow_id=$(debusine workflow start -w qli --yaml package-publish <<END|yq -r .id
 source_artifact: ${suite_id}@collections/${SRCPKG_NAME}_${SRCPKG_VERSION}
 binary_artifacts:
   category: debian:binary-package
