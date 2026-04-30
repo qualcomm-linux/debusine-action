@@ -1,0 +1,72 @@
+#!/bin/sh
+set -ex
+
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# Run on the host
+
+# Dependencies:
+#   ca-certificates and curl packages: when you run this script
+#   ca-certificates: on the user's target system since HTTPS is used
+
+# Inputs:
+#   DEBUSINE_HOST
+#   DEBUSINE_SCOPE
+#   DEBUSINE_USER
+#   DEBUSINE_TOKEN
+#   DEBUSINE_WORKSPACE
+#   SRCPKG_NAME
+#   SRCPKG_VERSION
+#   SUITE
+
+# Outputs:
+#   $GITHUB_STEP_SUMMARY: summary output for the web UI
+
+qli_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/qli/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
+ci_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
+
+cat > "$GITHUB_STEP_SUMMARY" <<END2
+**Build of $SRCPKG_NAME ($SRCPKG_VERSION) successful.**
+
+# Debusine workspace
+
+Build logs and artifacts are available directly from https://${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/ (SSO login required).
+
+# apt access
+
+Get an API token by logging in to https://${DEBUSINE_HOST}/ and then go to "Tokens" from your username on the top right. Adjust \`debusine-ci-auth.conf\` below to incorporate your Debusine username and API token. Your Debusine username should look like an email address as used with SSO. You can check against the displayed username on the top right when you are logged in.
+
+## Create \`debusine-ci-auth.conf\`:
+\`\`\`
+sudo sh -c 'umask 077; cat > /etc/apt/auth.conf.d/debusine-ci-auth.conf' <<END
+machine deb.${DEBUSINE_HOST}
+login <username>
+password <API token>
+END
+\`\`\`
+
+## Create \`qli.sources\` for baseline QLI apt repository access:
+\`\`\`
+sudo sh -c 'cat > /etc/apt/sources.list.d/qli.sources' <<END
+Types: deb deb-src
+URIs: https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/qli/
+Suites: ${SUITE}
+Components: main
+Signed-By:
+${qli_public_key}
+END
+\`\`\`
+
+## Create \`qli-cli.sources\` for build-specific apt repository access:
+\`\`\`
+sudo sh -c 'cat > /etc/apt/sources.list.d/qli-ci.sources' <<END
+Types: deb deb-src
+URIs: https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/
+Suites: ${SUITE}
+Components: main
+Signed-By:
+${ci_public_key}
+END
+\`\`\`
+END2
