@@ -149,11 +149,18 @@ jobs:
             "SUITE=$SUITE" \
             debusine-action/lib/build
           sudo incus exec debusine cat output >> "$GITHUB_OUTPUT"
-      - name: Note Debusine workspace URL
+      - name: Generate summary
         env:
-          WORKSPACE_URL: ${{ steps.build.outputs.url }}
+          DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
+          DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE}}
+          DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
+          DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
+          DEBUSINE_WORKSPACE: ${{ steps.build.outputs.workspace }}
+          SRCPKG_NAME: ${{ steps.build.outputs.srcpkg_name }}
+          SRCPKG_VERSION: ${{ steps.build.outputs.srcpkg_version }}
+          SUITE: ${{ steps.map_suite.outputs.suite }}
         run: |
-          echo "Debusine Workspace URL: $WORKSPACE_URL" >> "$GITHUB_STEP_SUMMARY"
+          debusine-action/lib/generate-step-summary
       - name: Upload release bundle
         if: ${{ inputs.release }}
         uses: actions/upload-artifact@v7
