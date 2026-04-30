@@ -1,5 +1,6 @@
-#!/bin/sh
+#!/bin/bash
 set -ex
+set -o pipefail
 
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
@@ -40,13 +41,32 @@ set -ex
 # 2. Install build dependencies before building the source package
 
 echo "::group::Prepare source package"
+if [ -f "srcpkg/debian/source/format" -a "$(cat srcpkg/debian/source/format)" = "3.0 (quilt)" ]; then
+    # Opportunistically fetch the upstream refs that gbp buildpackage
+    # may use to reconstruct the orig tarball. If these refs aren't available
+    # from our packaging branch, continue anyway to give gbp the opportunity to
+    # use whatever heuristics it wishes; if it is not successful, it is up to
+    # gbp to fail at that stage, not here.
+    cd srcpkg
+    # --depth=1 seems to break gbp's internal pristine-tar extraction, so not
+    # using shallow here for now
+    git fetch origin --no-tags refs/heads/pristine-tar:refs/heads/pristine-tar || true
+    # sed for input sanitization
+    upstream_version=$(dpkg-parsechangelog -SVersion|sed 's/[^A-Za-z0-9.+~:-]//g'|cut -d- -f1)
+    # Use perl for version to tag transformation directly from dep14
+    upstream_tag_ref=refs/tags/upstream/$(echo "$upstream_version"|perl -pe 'y/:~/%_/; s/\.(?=\.|$|lock$)/.#/g')
+    git fetch --depth=1 origin --no-tags "${upstream_tag_ref}:${upstream_tag_ref}"
+    cd ..
+fi
+
 sudo incus launch "images:debian/$SUITE" srcbuild
-sudo incus file push -r srcpkg srcbuild/root/
+tar c srcpkg|sudo incus exec srcbuild -- tar x
+sudo incus exec srcbuild -- chown -R root:root srcpkg
 sudo incus exec srcbuild -- sh - <<END
 set -ex
-apt-get install --update --no-install-recommends -y dpkg-dev
+apt-get install --update --no-install-recommends -y dpkg-dev git-buildpackage pristine-tar
 cd srcpkg
-dpkg-buildpackage -S -d -nc
+gbp buildpackage -S -sa -d -nc --git-builder=dpkg-buildpackage --source-option=--extend-diff-ignore=^\.github -us -uc
 END
 changes_file=$(sudo incus exec srcbuild -- sh -c 'echo *.changes')
 sudo incus file pull "srcbuild/root/$changes_file" .
