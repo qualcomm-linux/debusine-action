@@ -103,7 +103,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: qualcomm-linux/debusine-action
-          ref: main
+          ref: fix/basak-qcom/tmp
           path: debusine-action
       - id: build
         name: Build
@@ -188,7 +188,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: qualcomm-linux/debusine-action
-          ref: main
+          ref: fix/basak-qcom/tmp
           path: debusine-action
       - name: Download release bundle
         uses: actions/download-artifact@v8
