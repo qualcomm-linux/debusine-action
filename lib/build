@@ -44,7 +44,9 @@ default-workspace = $workspace
 EOF
 )
 
-workflow_id=$(echo "suffix: $child_ci_suffix"|debusine workflow start -w qli-ci --yaml create-child-workspace|yq -r .id)
+workflow_start_output=$(echo "suffix: $child_ci_suffix"|debusine workflow start -w qli-ci --yaml create-child-workspace)
+echo "Workflow start output: $workflow_start_output" >&2
+workflow_id=$(echo "$workflow_start_output"|yq -r .id)
 debusine-action/lib/poll_workflow.py "$workflow_id"
 debusine archive suite create --architecture all --architecture amd64 --architecture arm64 ${SUITE}
 debusine workflow-template create debian_pipeline debian-pipeline <<END
@@ -62,8 +64,11 @@ static_parameters:
 runtime_parameters:
   source_artifact: any
 END
-artifact_id=$(debusine artifact import-debian --yaml *.dsc|yq -r .artifact_id)
-workflow_id=$(echo "source_artifact: ${artifact_id}@artifacts"|debusine workflow start --yaml debian-pipeline|yq -r .id)
+artifact_import_output=$(debusine artifact import-debian --yaml *.dsc)
+echo "Artifact import output: $artifact_import_output" >&2
+artifact_id=$(echo "$artifact_import_output"|yq -r .artifact_id)
+workflow_start_output=$(echo "source_artifact: ${artifact_id}@artifacts"|debusine workflow start --yaml debian-pipeline)
+workflow_id=$(echo "$workflow_start_output"|yq -r .id)
 debusine-action/lib/poll_workflow.py "$workflow_id"
 
 echo "workspace=$workspace" > output
