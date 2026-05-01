@@ -68,6 +68,7 @@ artifact_import_output=$(debusine artifact import-debian --yaml *.dsc)
 echo "Artifact import output: $artifact_import_output" >&2
 artifact_id=$(echo "$artifact_import_output"|yq -r .artifact_id)
 workflow_start_output=$(echo "source_artifact: ${artifact_id}@artifacts"|debusine workflow start --yaml debian-pipeline)
+echo "Workflow start output: $workflow_start_output" >&2
 workflow_id=$(echo "$workflow_start_output"|yq -r .id)
 debusine-action/lib/poll_workflow.py "$workflow_id"
 

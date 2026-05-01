@@ -50,7 +50,7 @@ suite_id=$(
       end
   '
 )
-workflow_id=$(debusine workflow start -w qli --yaml package-publish <<END|yq -r .id
+workflow_start_output=$(debusine workflow start -w qli --yaml package-publish <<END
 source_artifact: ${suite_id}@collections/${SRCPKG_NAME}_${SRCPKG_VERSION}
 binary_artifacts:
   category: debian:binary-package
@@ -58,6 +58,8 @@ binary_artifacts:
 target_suite: ${SUITE}@debian:suite
 END
 )
+echo "Workflow start output: $workflow_start_output" >&2
+workflow_id=$(echo "$workflow_start_output"|yq -r .id)
 debusine-action/lib/poll_workflow.py "$workflow_id"
 
 echo "::endgroup::"
