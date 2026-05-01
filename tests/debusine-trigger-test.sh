@@ -1,7 +1,6 @@
+#!/bin/bash
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
-
-#!/bin/bash
 set -euo pipefail
 
 # ─────────────────────────────────────────────
@@ -16,6 +15,8 @@ set -euo pipefail
 # ─────────────────────────────────────────────
 
 TEST_CASES_DIR="$(cd "$(dirname "$0")/test-cases" && pwd)"
+
+GITHUB_STEP_SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
 
 # ── Resolve workspace (where action output files live) ────
 WORKSPACE_DIR="${WORKSPACE_DIR:-${GITHUB_WORKSPACE:-$(pwd)}}"
@@ -67,7 +68,21 @@ run_suite() {
   TOTAL_TESTS=$(jq '.tests | length' "$TEST_CONFIG")
   local PASSED=0 FAILED=0
 
+  local missing_req=""
+  while IFS= read -r req; do
+    [ -z "$req" ] && continue
+    if [ -z "${!req:-}" ]; then
+      missing_req="$req"
+      break
+    fi
+  done < <(jq -r '.requires // [] | .[]' "$TEST_CONFIG")
+
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  if [ -n "$missing_req" ]; then
+    echo "⏭ Skipping suite '$SUITE_NAME' — $missing_req is not set"
+    SUITE_SUMMARIES+=("| **${SUITE_NAME}** | — | — | — | — | ⏭ |")
+    return 0
+  fi
   echo "::group::Suite: $SUITE_NAME  ($TEST_CONFIG)"
   echo "Description : $SUITE_DESC"
   echo "Test count  : $TOTAL_TESTS"
@@ -90,7 +105,7 @@ run_suite() {
 
     # Execute command from WORKSPACE_DIR so relative paths resolve correctly
     local OUTPUT EXIT_CODE=0
-    OUTPUT=$(cd "$WORKSPACE_DIR" && eval "$COMMAND" 2>&1) || EXIT_CODE=$?
+    OUTPUT=$(cd "$WORKSPACE_DIR" && (set +u; eval "$COMMAND") 2>&1) || EXIT_CODE=$?
 
     echo "  │  Output      : $OUTPUT"
     echo "  │  Exit code   : $EXIT_CODE"

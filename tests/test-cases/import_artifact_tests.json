@@ -1,6 +1,7 @@
 {
   "description": "Import artifact action (import-artifact/action.yml) - verifies .dsc upload and artifact ID extraction",
   "action": "import-artifact",
+  "requires": ["ARTIFACT_ID"],
   "tests": [
     {
       "name": "artifact_yaml_exists",

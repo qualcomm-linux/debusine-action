@@ -81,14 +81,14 @@
     },
     {
       "name": "config_has_scope",
-      "command": "grep 'scope' ~/.config/debusine/client/config.ini | awk -F'= ' '{print $2}' | xargs",
+      "command": "grep -m1 'scope' ~/.config/debusine/client/config.ini | awk -F'= ' '{print $2}' | xargs",
       "expected": "^[a-zA-Z0-9_-]+$",
       "validation_type": "regex",
       "description": "Verify config.ini has a non-empty scope value"
     },
     {
       "name": "config_has_token",
-      "command": "grep 'token' ~/.config/debusine/client/config.ini | awk -F'= ' '{print $2}' | xargs",
+      "command": "grep -m1 'token' ~/.config/debusine/client/config.ini | awk -F'= ' '{print $2}' | xargs",
       "expected": "^[A-Za-z0-9]+$",
       "validation_type": "regex",
       "description": "Verify config.ini has a non-empty token value"

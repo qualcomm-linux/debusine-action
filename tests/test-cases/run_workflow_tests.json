@@ -1,6 +1,7 @@
 {
   "description": "Run workflow action (run-workflow/action.yml) - verifies workflow start, ID and URL extraction",
   "action": "run-workflow",
+  "requires": ["WORKFLOW_ID"],
   "tests": [
     {
       "name": "workflowlog_has_id_key",
