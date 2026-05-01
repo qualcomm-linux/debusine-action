@@ -16,6 +16,8 @@ set -euo pipefail
 
 TEST_CASES_DIR="$(cd "$(dirname "$0")/test-cases" && pwd)"
 
+GITHUB_STEP_SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
+
 # ── Resolve workspace (where action output files live) ────
 WORKSPACE_DIR="${WORKSPACE_DIR:-${GITHUB_WORKSPACE:-$(pwd)}}"
 echo "Workspace dir : $WORKSPACE_DIR"
