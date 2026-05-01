@@ -68,7 +68,21 @@ run_suite() {
   TOTAL_TESTS=$(jq '.tests | length' "$TEST_CONFIG")
   local PASSED=0 FAILED=0
 
+  local missing_req=""
+  while IFS= read -r req; do
+    [ -z "$req" ] && continue
+    if [ -z "${!req:-}" ]; then
+      missing_req="$req"
+      break
+    fi
+  done < <(jq -r '.requires // [] | .[]' "$TEST_CONFIG")
+
   echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  if [ -n "$missing_req" ]; then
+    echo "⏭ Skipping suite '$SUITE_NAME' — $missing_req is not set"
+    SUITE_SUMMARIES+=("| **${SUITE_NAME}** | — | — | — | — | ⏭ |")
+    return 0
+  fi
   echo "::group::Suite: $SUITE_NAME  ($TEST_CONFIG)"
   echo "Description : $SUITE_DESC"
   echo "Test count  : $TOTAL_TESTS"

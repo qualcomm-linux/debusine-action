@@ -1,6 +1,7 @@
 {
   "description": "Wrapper composite action (action.yml) end-to-end tests - verifies all three sub-actions ran and outputs are consistent",
   "action": "compose-tests",
+  "requires": ["ARTIFACT_ID", "WORKFLOW_ID"],
   "tests": [
     {
       "name": "all_output_files_present",
