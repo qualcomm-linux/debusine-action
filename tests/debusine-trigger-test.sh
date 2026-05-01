@@ -105,7 +105,7 @@ run_suite() {
 
     # Execute command from WORKSPACE_DIR so relative paths resolve correctly
     local OUTPUT EXIT_CODE=0
-    OUTPUT=$(cd "$WORKSPACE_DIR" && eval "$COMMAND" 2>&1) || EXIT_CODE=$?
+    OUTPUT=$(cd "$WORKSPACE_DIR" && (set +u; eval "$COMMAND") 2>&1) || EXIT_CODE=$?
 
     echo "  │  Output      : $OUTPUT"
     echo "  │  Exit code   : $EXIT_CODE"
