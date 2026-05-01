@@ -1,0 +1,34 @@
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# SEE README.debusine.md BEFORE CHANGING THIS FILE
+
+# Note: in addition to the default branch, this workflow file must also be
+# copied into each packaging branch in order to function as intended.
+
+name: Debusine Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Run release step
+        type: boolean
+        required: true
+        default: false
+
+jobs:
+  debusine:
+    name: Debusine
+    if: startsWith(github.ref_name, 'qcom/debian/')
+    uses: qualcomm-linux/debusine-action/.github/workflows/debusine.yml@main
+    with:
+      target_branch: ${{ github.ref_name }}
+      release: ${{ inputs.release }}
+    permissions:
+      contents: write
+      deployments: write
+    secrets:
+      DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
+      DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
+      DEBUSINE_RELEASE_TOKEN: ${{ secrets.DEBUSINE_RELEASE_TOKEN }}

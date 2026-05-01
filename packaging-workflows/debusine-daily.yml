@@ -1,0 +1,63 @@
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# SEE README.debusine.md BEFORE CHANGING THIS FILE
+
+name: Debusine Daily
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  # For scheduled runs, determine which target branches exist
+  check-branches:
+    name: Check branches
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: set-matrix
+        name: Set matrix
+        run: |
+          # Define candidate branches (duplicated from workflow_dispatch options in debusine.yml)
+          candidates='["qcom/debian/latest", "qcom/debian/trixie"]'
+
+          # Filter to branches that exist
+          existing=()
+          for branch in $(echo "$candidates" | jq -r '.[]'); do
+            if git rev-parse --verify "origin/$branch" >/dev/null 2>&1; then
+              existing+=("\"$branch\"")
+            fi
+          done
+
+          # Create JSON array
+          matrix="[$(IFS=,; echo "${existing[*]}")]"
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "Existing branches: $matrix"
+
+  # For scheduled runs, call the workflow once per existing branch
+  debusine-scheduled:
+    name: Debusine (${{ matrix.target_branch }})
+    needs: check-branches
+    strategy:
+      fail-fast: false
+      matrix:
+        target_branch: ${{ fromJson(needs.check-branches.outputs.matrix) }}
+    uses: qualcomm-linux/debusine-action/.github/workflows/debusine.yml@main
+    with:
+      target_branch: ${{ matrix.target_branch }}
+      source_ref: refs/heads/${{ matrix.target_branch }}
+      release: false
+      job_index: ${{ strategy.job-index }}
+    permissions:
+      contents: write
+      deployments: write
+    secrets:
+      DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
+      DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
+      DEBUSINE_RELEASE_TOKEN: ${{ secrets.DEBUSINE_RELEASE_TOKEN }}
