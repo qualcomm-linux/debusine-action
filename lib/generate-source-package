@@ -36,6 +36,8 @@ set -o pipefail
 #         referenced files
 #     $GITHUB_OUTPUT (append): srcpkg_name, srcpkg_version
 
+: ${GITHUB_OUTPUT:=/dev/null}
+
 # A couple of things we might want to implement in the future:
 # 1. Run as a normal user, not root
 # 2. Install build dependencies before building the source package
