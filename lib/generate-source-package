@@ -55,9 +55,17 @@ if [ -f "srcpkg/debian/source/format" -a "$(cat srcpkg/debian/source/format)" = 
     git fetch origin --no-tags refs/heads/pristine-tar:refs/heads/pristine-tar || true
     # sed for input sanitization
     upstream_version=$(dpkg-parsechangelog -SVersion|sed 's/[^A-Za-z0-9.+~:-]//g'|cut -d- -f1)
-    # Use perl for version to tag transformation directly from dep14
-    upstream_tag_ref=refs/tags/upstream/$(echo "$upstream_version"|perl -pe 'y/:~/%_/; s/\.(?=\.|$|lock$)/.#/g')
-    git fetch --depth=1 origin --no-tags "${upstream_tag_ref}:${upstream_tag_ref}"
+    # Get the upstream tag pattern from gbp config
+    upstream_tag_pattern=$(gbp config buildpackage.upstream-tag)
+    # Only proceed if the pattern contains %(version)s
+    if echo "$upstream_tag_pattern" | grep -qF '%(version)s'; then
+        # Use perl for version to tag transformation directly from dep14
+        transformed_version=$(echo "$upstream_version"|perl -pe 'y/:~/%_/; s/\.(?=\.|$|lock$)/.#/g')
+        # Substitute %(version)s, sanitize, and prepend refs/tags/
+        upstream_tag_ref=refs/tags/$(echo "$upstream_tag_pattern" | sed "s|%(version)s|$transformed_version|" | sed 's/[^A-Za-z0-9.+/%_#()-]//g')
+        # Validate the ref format before fetching
+        git check-ref-format "$upstream_tag_ref" && git fetch --depth=1 origin --no-tags "${upstream_tag_ref}:${upstream_tag_ref}"
+    fi
     cd ..
 fi
 
