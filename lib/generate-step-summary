@@ -29,7 +29,7 @@ qli_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${
 ci_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
 
 cat > "$GITHUB_STEP_SUMMARY" <<END2
-**Build of $SRCPKG_NAME ($SRCPKG_VERSION) successful.**
+**Build of $SRCPKG_NAME (\`$SRCPKG_VERSION\`) successful.**
 
 # Debusine workspace
 
