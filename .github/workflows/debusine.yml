@@ -132,7 +132,7 @@ jobs:
           fi
 
           echo "::group::Generate source package"
-          sudo apt-get install --update --no-install-recommends -y devscripts dctrl-tools
+          sudo apt-get install --update --no-install-recommends -y devscripts dctrl-tools git-buildpackage
           SUITE="$SUITE" debusine-action/lib/generate-source-package
           dcmd sudo incus file push *.changes debusine/root/
           echo "::endgroup::"
