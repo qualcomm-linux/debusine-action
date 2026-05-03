@@ -29,7 +29,7 @@ qli_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${
 ci_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
 
 cat > "$GITHUB_STEP_SUMMARY" <<END2
-**Build of $SRCPKG_NAME ($SRCPKG_VERSION) successful.**
+**Build of $SRCPKG_NAME (\`$SRCPKG_VERSION\`) successful.**
 
 # Debusine workspace
 
@@ -43,7 +43,7 @@ Get an API token by logging in to https://${DEBUSINE_HOST}/ and then go to "Toke
 \`\`\`
 sudo sh -c 'umask 077; cat > /etc/apt/auth.conf.d/debusine-ci-auth.conf' <<END
 machine deb.${DEBUSINE_HOST}
-login <username>
+login <debusine account email>
 password <API token>
 END
 \`\`\`
@@ -60,7 +60,7 @@ ${qli_public_key}
 END
 \`\`\`
 
-## Create \`qli-cli.sources\` for build-specific apt repository access
+## Create \`qli-ci.sources\` for build-specific apt repository access
 \`\`\`
 sudo sh -c 'cat > /etc/apt/sources.list.d/qli-ci.sources' <<END
 Types: deb deb-src
