@@ -26,6 +26,7 @@ set -o pipefail
 #     incus (configured)
 #     devscripts
 #     dctrl-tools
+#     git-buildpackage
 
 # Inputs:
 #     $PWD/srcpkg/: checked out source tree
