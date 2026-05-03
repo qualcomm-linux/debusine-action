@@ -28,7 +28,7 @@ set -o pipefail
 
 echo "::group::Build in Debusine"
 
-child_ci_suffix=gh-${GITHUB_REPOSITORY_ID}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${JOB_INDEX}
+child_ci_suffix=gh-${GITHUB_REPOSITORY_ID:-0}-${GITHUB_RUN_ID:-0}-${GITHUB_RUN_ATTEMPT:-0}-${JOB_INDEX:-0}
 workspace="qli-ci-${child_ci_suffix}"
 
 mkdir -p ~/.config/debusine/client

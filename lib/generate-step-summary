@@ -23,6 +23,8 @@ set -ex
 # Outputs:
 #   $GITHUB_STEP_SUMMARY: summary output for the web UI
 
+: ${GITHUB_STEP_SUMMARY:=/dev/null}
+
 qli_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/qli/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
 ci_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
 
