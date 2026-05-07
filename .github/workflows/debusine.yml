@@ -6,6 +6,11 @@ name: Debusine CI
 on:
   workflow_call:
     inputs:
+      workflow_ref:
+        description: where this called workflow should find its own implementation
+        type: string
+        default: main
+        required: false
       target_branch:
         description: Where the packaging will land (or for dailies, has landed)
         type: string
@@ -103,7 +108,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: qualcomm-linux/debusine-action
-          ref: main
+          ref: ${{ inputs.workflow_ref }}
           path: debusine-action
       - id: build
         name: Build
@@ -188,7 +193,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: qualcomm-linux/debusine-action
-          ref: main
+          ref: ${{ inputs.workflow_ref }}
           path: debusine-action
       - name: Download release bundle
         uses: actions/download-artifact@v8
