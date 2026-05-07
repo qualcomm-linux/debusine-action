@@ -31,6 +31,10 @@ on:
         type: string
         required: false
         default: "0"
+      target_suite:
+        description: Override the target suite instead of deriving it from target_branch
+        type: string
+        required: false
     secrets:
       DEBUSINE_USER:
         required: true
@@ -61,8 +65,19 @@ jobs:
         uses: actions/github-script@v9
         env:
           TARGET_BRANCH: ${{ inputs.target_branch }}
+          TARGET_SUITE: ${{ inputs.target_suite }}
         with:
           script: |
+            const targetSuite = process.env.TARGET_SUITE;
+
+            // If target_suite is explicitly provided, use it directly
+            if (targetSuite) {
+              core.setOutput('suite', targetSuite);
+              core.info(`Using explicitly provided suite '${targetSuite}'`);
+              return;
+            }
+
+            // Otherwise, derive suite from target_branch (existing behavior)
             const suiteMap = {
               "qcom/debian/latest": "forky",
               "qcom/debian/trixie": "trixie",
