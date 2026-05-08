@@ -25,6 +25,7 @@ jobs:
     with:
       target_branch: ${{ github.ref_name }}
       release: ${{ inputs.release }}
+      debusine-action-ref: main
     permissions:
       contents: write
       deployments: write

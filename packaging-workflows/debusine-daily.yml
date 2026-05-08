@@ -53,6 +53,7 @@ jobs:
       target_branch: ${{ matrix.target_branch }}
       source_ref: refs/heads/${{ matrix.target_branch }}
       release: false
+      debusine-action-ref: main
       job_index: ${{ strategy.job-index }}
     permissions:
       contents: write
