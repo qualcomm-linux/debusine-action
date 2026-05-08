@@ -1,0 +1,12 @@
+ca-certificates
+curl
+dctrl-tools
+devscripts
+dpkg-dev
+git
+git-buildpackage
+pristine-tar
+python3-tenacity
+python3-yaml
+yq
+equivs

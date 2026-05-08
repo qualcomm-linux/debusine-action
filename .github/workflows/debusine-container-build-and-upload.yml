@@ -1,0 +1,74 @@
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+name: Debusine Container Build And Upload
+
+on:
+  schedule:
+    - cron: '0 0 * * 1'
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/debusine-container-build-and-upload.yml'
+      - 'Dockerfiles/debusine-builder/**'
+
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/debusine-container-build-and-upload.yml'
+      - 'Dockerfiles/debusine-builder/**'
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  QCOM_ORG_NAME: qualcomm-linux
+  IMAGE_NAME: debusine-pkg-builder
+
+jobs:
+  build-debian:
+    name: Build ${{ matrix.suite }} image
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: bookworm
+            backports_suite: bookworm
+          - suite: forky
+            backports_suite: ""
+          - suite: trixie
+            backports_suite: trixie
+          - suite: sid
+            backports_suite: ""
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Build Debian image
+        run: |
+          docker build \
+            --build-arg SUITE=${{ matrix.suite }} \
+            --build-arg BACKPORTS_SUITE=${{ matrix.backports_suite }} \
+            -t ghcr.io/${{ env.QCOM_ORG_NAME }}/${{ env.IMAGE_NAME }}:${{ matrix.suite }} \
+            -f Dockerfiles/debusine-builder/Dockerfile \
+            Dockerfiles/debusine-builder
+
+      - name: Log in to GHCR
+        if: ${{ github.event_name == 'schedule' || github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Debian image
+        if: ${{ github.event_name == 'schedule' || github.event_name == 'push' || github.event_name == 'workflow_dispatch' }}
+        run: docker push ghcr.io/${{ env.QCOM_ORG_NAME }}/${{ env.IMAGE_NAME }}:${{ matrix.suite }}

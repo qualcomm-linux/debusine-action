@@ -10,22 +10,22 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  packages: read
   
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
     container:
-      image: debian:trixie
+      image: ghcr.io/qualcomm-linux/debusine-pkg-builder:trixie
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
       options: --user root
     permissions:
       pull-requests: read
       contents: write 
     steps:
-      - name: Install git
-        run: |
-          set -euo pipefail
-          apt-get update
-          apt-get install -y git jq yq equivs
+
       - name: Checkout repository
         uses: actions/checkout@main
         with:
