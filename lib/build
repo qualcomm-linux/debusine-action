@@ -7,10 +7,11 @@ set -o pipefail
 
 # Send a source package to Debusine for building and wait for build completion
 
-# Run inside the container created with `debusine-action/lib/prepare-debusine`
+# Run directly inside the current job container. Debusine tooling is expected to
+# be available already.
 
 # Dependencies:
-#   `debusine` incus container (Debusine will be configured)
+#   debusine-client, python3-debusine, yq
 
 # Inputs:
 #   GITHUB_REPOSITORY_ID

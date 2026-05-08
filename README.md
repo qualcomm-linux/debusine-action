@@ -14,6 +14,11 @@ This action wraps three sub-actions into a single configurable step:
 | `import-artifact` | Uploads a `.dsc` source package to a Debusine workspace |
 | `run-workflow` | Starts a named Debusine workflow with the uploaded artifact |
 
+The repository also contains higher-level reusable packaging workflows. Those
+workflows generate source packages in suite-specific GHCR builder images and
+run Debusine client and release steps in the `trixie` builder image published
+from this repository.
+
 ---
 
 ## Usage
@@ -75,7 +80,7 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     container:
-      image: debian:trixie
+      image: ghcr.io/qualcomm-linux/debusine-pkg-builder:trixie
       options: --user root
     steps:
       - uses: actions/checkout@main

@@ -13,20 +13,14 @@ set -o pipefail
 # achieve. This script should contain all the knowledge required to build
 # source packages from these exceptional source trees.
 
-# The `dpkg-buildpackage -S` step is specifically done inside a container that
-# matches the target suite in case there are nuances that break when not done
-# this way.
-
-# This script should run from a host system with Incus available. It will do
-# the work inside a container as needed.
-
-# Run on the host
+# This script is expected to run directly inside a job container that already
+# matches the target suite.
 
 # Dependencies:
-#     incus (configured)
 #     devscripts
 #     dctrl-tools
 #     git-buildpackage
+#     pristine-tar
 
 # Inputs:
 #     $PWD/srcpkg/: checked out source tree
@@ -70,23 +64,14 @@ if [ -f "srcpkg/debian/source/format" -a "$(cat srcpkg/debian/source/format)" = 
     cd ..
 fi
 
-sudo incus launch "images:debian/$SUITE" srcbuild
-tar c srcpkg|sudo incus exec srcbuild -- tar x
-sudo incus exec srcbuild -- chown -R root:root srcpkg
-sudo incus exec srcbuild -- sh - <<END
-set -ex
-apt-get install --update --no-install-recommends -y dpkg-dev git-buildpackage pristine-tar
 cd srcpkg
+git config --global --add safe.directory "$(pwd)"
 gbp buildpackage -S -sa -d -nc --git-builder=dpkg-buildpackage --git-ignore-branch --source-option=--extend-diff-ignore=^\.github -us -uc
-END
-changes_file=$(sudo incus exec srcbuild -- sh -c 'echo *.changes')
-sudo incus file pull "srcbuild/root/$changes_file" .
-for another_file in $(dcmd --no-changes echo "$changes_file"); do
-    sudo incus file pull "srcbuild/root/$another_file" .
-done
+cd ..
 
 cat >> "$GITHUB_OUTPUT" <<END
 srcpkg_name=$(grep-dctrl -nsSource . *.dsc)
 srcpkg_version=$(grep-dctrl -nsVersion . *.dsc)
+dsc_path=$(printf '%s\n' *.dsc)
 END
 echo "::endgroup::"
