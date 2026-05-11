@@ -69,9 +69,17 @@ git config --global --add safe.directory "$(pwd)"
 gbp buildpackage -S -sa -d -nc --git-builder=dpkg-buildpackage --git-ignore-branch --source-option=--extend-diff-ignore=^\.github -us -uc
 cd ..
 
+changes_path=$(printf '%s\n' *.changes)
+if [ "$(printf '%s\n' "$changes_path" | wc -l)" -ne 1 ]; then
+    echo "Expected exactly one .changes file, found:" >&2
+    printf '%s\n' "$changes_path" >&2
+    exit 1
+fi
+
 cat >> "$GITHUB_OUTPUT" <<END
-srcpkg_name=$(grep-dctrl -nsSource . *.dsc)
-srcpkg_version=$(grep-dctrl -nsVersion . *.dsc)
-dsc_path=$(printf '%s\n' *.dsc)
+srcpkg_name=$(grep-dctrl -nsSource . "$(dcmd --dsc echo "$changes_path")")
+srcpkg_version=$(grep-dctrl -nsVersion . "$(dcmd --dsc echo "$changes_path")")
+changes_path=$changes_path
+dsc_path=$(dcmd --dsc echo "$changes_path")
 END
 echo "::endgroup::"

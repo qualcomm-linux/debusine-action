@@ -124,16 +124,19 @@ jobs:
           set -ex
           debusine-action/lib/generate-source-package
 
+      - name: Stage source package files
+        env:
+          CHANGES_PATH: ${{ steps.generate-source-package.outputs.changes_path }}
+        run: |
+          set -eux
+          mkdir source-package
+          dcmd cp "$CHANGES_PATH" source-package/
+
       - name: Upload source package files
         uses: actions/upload-artifact@v7
         with:
           name: source-package
-          path: |
-            *.changes
-            *.dsc
-            *.orig*.tar.*
-            *.debian.tar.*
-            *.diff.gz
+          path: source-package
           if-no-files-found: error
 
       - name: Upload release bundle
@@ -171,6 +174,12 @@ jobs:
         with:
           name: source-package
           path: .
+
+      - name: Restore source package files to workspace root
+        run: |
+          set -eux
+          find source-package -maxdepth 1 -type f -exec mv -t . {} +
+          rmdir source-package
 
       - id: build
         name: Build in Debusine
