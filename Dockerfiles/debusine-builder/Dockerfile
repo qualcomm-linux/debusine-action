@@ -19,9 +19,13 @@ RUN set -eux; \
         $(tr '\n' ' ' < /tmp/base-packages.txt) \
         "debusine-client${client_suffix}" \
         "python3-debusine${client_suffix}"; \
+    groupadd --system --gid 10001 debusine; \
+    useradd --system --uid 10001 --gid debusine --create-home --home-dir /home/debusine --shell /bin/bash debusine; \
+    install -d -o debusine -g debusine /workspace; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/* /tmp/base-packages.txt /tmp/debusine-builder-sources
 
 WORKDIR /workspace
+USER debusine
 
 CMD ["bash"]
