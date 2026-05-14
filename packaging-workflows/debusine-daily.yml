@@ -59,6 +59,7 @@ jobs:
     permissions:
       contents: write
       deployments: write
+      packages: read
     secrets:
       DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
       DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}

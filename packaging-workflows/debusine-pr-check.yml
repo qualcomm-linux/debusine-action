@@ -15,6 +15,7 @@ permissions:
   contents: write
   deployments: write
   statuses: write
+  packages: read
 
 jobs:
   debusine:

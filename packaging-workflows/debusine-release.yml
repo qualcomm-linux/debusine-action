@@ -4,7 +4,7 @@
 # SEE README.debusine.md BEFORE CHANGING THIS FILE
 
 # Note: in addition to the default branch, this workflow file must also be
-# copied into each packaging branch in order to function as intended.
+# copied into each enabled packaging branch in order to function as intended.
 
 name: Debusine Release
 
@@ -24,12 +24,14 @@ jobs:
     uses: qualcomm-linux/debusine-action/.github/workflows/debusine.yml@main
     with:
       target_branch: ${{ github.ref_name }}
+      source_ref: refs/heads/${{ github.ref_name }}
       release: ${{ inputs.release }}
       debusine-action-ref: main
       debusine-parent-workspace: ${{ vars.DEBUSINE_PARENT_WORKSPACE || 'ci' }}
     permissions:
       contents: write
       deployments: write
+      packages: read
     secrets:
       DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
       DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
