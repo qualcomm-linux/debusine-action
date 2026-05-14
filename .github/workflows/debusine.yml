@@ -24,6 +24,11 @@ on:
         type: string
         required: false
         default: main
+      debusine-parent-workspace:
+        description: Parent Debusine workspace used to create per-run CI child workspaces
+        type: string
+        required: false
+        default: ci
       job_index:
         # This is used to generate a unique Debusine child workspace name for
         # each expansion of the matrix
@@ -192,6 +197,7 @@ jobs:
           DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
           DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE }}
           DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
+          DEBUSINE_PARENT_WORKSPACE: ${{ inputs.debusine-parent-workspace }}
         run: |
           set -ex
           debusine-action/lib/build

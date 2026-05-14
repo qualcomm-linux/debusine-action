@@ -26,6 +26,7 @@ jobs:
       target_branch: ${{ github.ref_name }}
       release: ${{ inputs.release }}
       debusine-action-ref: main
+      debusine-parent-workspace: ${{ vars.DEBUSINE_PARENT_WORKSPACE || 'ci' }}
     permissions:
       contents: write
       deployments: write
