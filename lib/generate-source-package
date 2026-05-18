@@ -38,36 +38,53 @@ set -o pipefail
 # 2. Install build dependencies before building the source package
 
 echo "::group::Prepare source package"
-if [ -f "srcpkg/debian/source/format" -a "$(cat srcpkg/debian/source/format)" = "3.0 (quilt)" ]; then
-    # Opportunistically fetch the upstream refs that gbp buildpackage
-    # may use to reconstruct the orig tarball. If these refs aren't available
-    # from our packaging branch, continue anyway to give gbp the opportunity to
-    # use whatever heuristics it wishes; if it is not successful, it is up to
-    # gbp to fail at that stage, not here.
+if [ -f "srcpkg/debian/source/format" -a "$(cat srcpkg/debian/source/format)" = "3.0 (quilt)" ] && [ ! -f "srcpkg/debian/gbp.conf" ]; then
+    # Non-gbp quilt path: source tree was prepared externally (e.g.
+    # pkg-linux-qcom). There is no gbp.conf, no pristine-tar branch, and no
+    # upstream tag. Build the source package directly using dpkg-buildpackage
+    # -S after creating the orig tarball from the source tree.
     cd srcpkg
-    # --depth=1 seems to break gbp's internal pristine-tar extraction, so not
-    # using shallow here for now
-    git fetch origin --no-tags refs/heads/pristine-tar:refs/heads/pristine-tar || true
-    # sed for input sanitization
-    upstream_version=$(dpkg-parsechangelog -SVersion|sed 's/[^A-Za-z0-9.+~:-]//g'|cut -d- -f1)
-    # Get the upstream tag pattern from gbp config
-    upstream_tag_pattern=$(gbp config buildpackage.upstream-tag)
-    # Only proceed if the pattern contains %(version)s
-    if echo "$upstream_tag_pattern" | grep -qF '%(version)s'; then
-        # Use perl for version to tag transformation directly from dep14
-        transformed_version=$(echo "$upstream_version"|perl -pe 'y/:~/%_/; s/\.(?=\.|$|lock$)/.#/g')
-        # Substitute %(version)s, sanitize, and prepend refs/tags/
-        upstream_tag_ref=refs/tags/$(echo "$upstream_tag_pattern" | sed "s|%(version)s|$transformed_version|" | sed 's/[^A-Za-z0-9.+/%_#()-]//g')
-        # Validate the ref format before fetching
-        git check-ref-format "$upstream_tag_ref" && git fetch --depth=1 origin --no-tags "${upstream_tag_ref}:${upstream_tag_ref}"
+    git config --global --add safe.directory "$(pwd)"
+    PKG=$(dpkg-parsechangelog -SSource)
+    VER=$(dpkg-parsechangelog -SVersion)
+    UPSTREAM_VER=$(echo "$VER" | sed 's/-[^-]*$//')
+    ORIG_TAR="../${PKG}_${UPSTREAM_VER}.orig.tar.gz"
+    echo "Creating orig tarball: ${ORIG_TAR}"
+    tar czf "$ORIG_TAR" --exclude=./debian --exclude=./.git .
+    dpkg-buildpackage -S -sa -d -nc -us -uc
+    cd ..
+else
+    if [ -f "srcpkg/debian/source/format" -a "$(cat srcpkg/debian/source/format)" = "3.0 (quilt)" ]; then
+        # Opportunistically fetch the upstream refs that gbp buildpackage
+        # may use to reconstruct the orig tarball. If these refs aren't available
+        # from our packaging branch, continue anyway to give gbp the opportunity to
+        # use whatever heuristics it wishes; if it is not successful, it is up to
+        # gbp to fail at that stage, not here.
+        cd srcpkg
+        # --depth=1 seems to break gbp's internal pristine-tar extraction, so not
+        # using shallow here for now
+        git fetch origin --no-tags refs/heads/pristine-tar:refs/heads/pristine-tar || true
+        # sed for input sanitization
+        upstream_version=$(dpkg-parsechangelog -SVersion|sed 's/[^A-Za-z0-9.+~:-]//g'|cut -d- -f1)
+        # Get the upstream tag pattern from gbp config
+        upstream_tag_pattern=$(gbp config buildpackage.upstream-tag)
+        # Only proceed if the pattern contains %(version)s
+        if echo "$upstream_tag_pattern" | grep -qF '%(version)s'; then
+            # Use perl for version to tag transformation directly from dep14
+            transformed_version=$(echo "$upstream_version"|perl -pe 'y/:~/%_/; s/\.(?=\.|$|lock$)/.#/g')
+            # Substitute %(version)s, sanitize, and prepend refs/tags/
+            upstream_tag_ref=refs/tags/$(echo "$upstream_tag_pattern" | sed "s|%(version)s|$transformed_version|" | sed 's/[^A-Za-z0-9.+/%_#()-]//g')
+            # Validate the ref format before fetching
+            git check-ref-format "$upstream_tag_ref" && git fetch --depth=1 origin --no-tags "${upstream_tag_ref}:${upstream_tag_ref}"
+        fi
+        cd ..
     fi
+
+    cd srcpkg
+    git config --global --add safe.directory "$(pwd)"
+    gbp buildpackage -S -sa -d -nc --git-builder=dpkg-buildpackage --git-ignore-branch --source-option=--extend-diff-ignore=^\.github -us -uc
     cd ..
 fi
-
-cd srcpkg
-git config --global --add safe.directory "$(pwd)"
-gbp buildpackage -S -sa -d -nc --git-builder=dpkg-buildpackage --git-ignore-branch --source-option=--extend-diff-ignore=^\.github -us -uc
-cd ..
 
 changes_path=$(printf '%s\n' *.changes)
 if [ "$(printf '%s\n' "$changes_path" | wc -l)" -ne 1 ]; then
