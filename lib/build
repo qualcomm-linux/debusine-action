@@ -7,10 +7,11 @@ set -o pipefail
 
 # Send a source package to Debusine for building and wait for build completion
 
-# Run inside the container created with `debusine-action/lib/prepare-debusine`
+# Run directly inside the current job container. Debusine tooling is expected to
+# be available already.
 
 # Dependencies:
-#   `debusine` incus container (Debusine will be configured)
+#   debusine-client, python3-debusine, yq
 
 # Inputs:
 #   GITHUB_REPOSITORY_ID
@@ -20,6 +21,7 @@ set -o pipefail
 #   DEBUSINE_HOST
 #   DEBUSINE_SCOPE
 #   DEBUSINE_TOKEN
+#   DEBUSINE_PARENT_WORKSPACE (optional, defaults to qli-ci)
 #   SUITE
 #   .dsc file in current directory
 
@@ -28,8 +30,9 @@ set -o pipefail
 
 echo "::group::Build in Debusine"
 
+parent_workspace=${DEBUSINE_PARENT_WORKSPACE:-qli-ci}
 child_ci_suffix=gh-${GITHUB_REPOSITORY_ID:-0}-${GITHUB_RUN_ID:-0}-${GITHUB_RUN_ATTEMPT:-0}-${JOB_INDEX:-0}
-workspace="qli-ci-${child_ci_suffix}"
+workspace="${parent_workspace}-${child_ci_suffix}"
 
 mkdir -p ~/.config/debusine/client
 ( umask 077; cat > ~/.config/debusine/client/config.ini <<EOF
@@ -44,7 +47,7 @@ default-workspace = $workspace
 EOF
 )
 
-workflow_start_output=$(echo "suffix: $child_ci_suffix"|debusine workflow start -w qli-ci --yaml create-child-workspace)
+workflow_start_output=$(echo "suffix: $child_ci_suffix"|debusine workflow start -w "${parent_workspace}" --yaml create-child-workspace)
 echo "Workflow start output: $workflow_start_output" >&2
 workflow_id=$(echo "$workflow_start_output"|yq -r .id)
 debusine-action/lib/poll_workflow.py "$workflow_id"

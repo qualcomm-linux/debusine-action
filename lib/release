@@ -5,19 +5,21 @@ set -o pipefail
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
-# Release a Debusine build from a ci child workspace into the Debusine qli
+# Release a Debusine build from a ci child workspace into the target Debusine
 # workspace
 
-# Run inside the container created with `lib/prepare-debusine`
+# Run directly inside the current job container. Debusine tooling is expected to
+# be available already.
 
 # Dependencies:
-#   `debusine` incus container (Debusine will be configured)
+#   debusine-client, python3-debusine, yq
 
 # Inputs:
 #   DEBUSINE_HOST
 #   DEBUSINE_SCOPE
 #   DEBUSINE_TOKEN
 #   DEBUSINE_CI_WORKSPACE
+#   DEBUSINE_TARGET_WORKSPACE (optional, defaults to qli)
 #   SRCPKG_NAME
 #   SRCPKG_VERSION
 #   SUITE
@@ -25,7 +27,9 @@ set -o pipefail
 # Outputs:
 #   None
 
-echo "::group::Release to Debusine qli"
+target_workspace=${DEBUSINE_TARGET_WORKSPACE:-qli}
+
+echo "::group::Release to Debusine ${target_workspace}"
 
 mkdir -p ~/.config/debusine/client
 ( umask 077; cat > ~/.config/debusine/client/config.ini <<EOF
@@ -36,7 +40,7 @@ default-server = default
 api-url = https://${DEBUSINE_HOST}/api
 scope = ${DEBUSINE_SCOPE}
 token = ${DEBUSINE_TOKEN}
-default-workspace = qli
+default-workspace = ${target_workspace}
 EOF
 )
 
@@ -50,7 +54,7 @@ suite_id=$(
       end
   '
 )
-workflow_start_output=$(debusine workflow start -w qli --yaml package-publish <<END
+workflow_start_output=$(debusine workflow start -w "${target_workspace}" --yaml package-publish <<END
 source_artifact: ${suite_id}@collections/${SRCPKG_NAME}_${SRCPKG_VERSION}
 binary_artifacts:
   category: debian:binary-package

@@ -53,10 +53,13 @@ jobs:
       target_branch: ${{ matrix.target_branch }}
       source_ref: refs/heads/${{ matrix.target_branch }}
       release: false
+      debusine-action-ref: main
+      debusine-parent-workspace: ${{ vars.DEBUSINE_PARENT_WORKSPACE || 'qli-ci' }}
       job_index: ${{ strategy.job-index }}
     permissions:
       contents: write
       deployments: write
+      packages: read
     secrets:
       DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
       DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}

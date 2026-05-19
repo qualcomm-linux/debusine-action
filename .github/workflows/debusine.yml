@@ -19,6 +19,16 @@ on:
         type: boolean
         required: true
         default: true
+      debusine-action-ref:
+        description: Ref of qualcomm-linux/debusine-action to check out for helper scripts
+        type: string
+        required: false
+        default: main
+      debusine-parent-workspace:
+        description: Parent Debusine workspace used to create per-run CI child workspaces
+        type: string
+        required: false
+        default: qli-ci
       job_index:
         # This is used to generate a unique Debusine child workspace name for
         # each expansion of the matrix
@@ -41,15 +51,14 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.target_branch }}-${{ inputs.release && 'release' || github.run_id }}
 
 jobs:
-  build:
-    name: Build
+  resolve:
+    name: Resolve shared inputs
     runs-on: ubuntu-latest
+    # The source-package, Debusine build, and release jobs all consume these.
     outputs:
       suite: ${{ steps.map_suite.outputs.suite }}
       source_ref: ${{ steps.determine_checkout_ref.outputs.source_ref }}
-      workspace: ${{ steps.build.outputs.workspace }}
-      srcpkg_name: ${{ steps.build.outputs.srcpkg_name }}
-      srcpkg_version: ${{ steps.build.outputs.srcpkg_version }}
+      debusine_action_ref: ${{ inputs.debusine-action-ref }}
     steps:
       - id: map_suite
         name: Map branch to suite
@@ -94,73 +103,65 @@ jobs:
             }
             core.setOutput('source_ref', ref);
             core.info(`Using source_ref '${ref}'`);
+
+  source-package:
+    name: Prepare source package
+    needs: resolve
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/qualcomm-linux/debusine-pkg-builder:${{ needs.resolve.outputs.suite == 'unstable' && 'sid' || needs.resolve.outputs.suite }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      srcpkg_name: ${{ steps.generate-source-package.outputs.srcpkg_name }}
+      srcpkg_version: ${{ steps.generate-source-package.outputs.srcpkg_version }}
+    steps:
       - uses: actions/checkout@v6
         with:
           # Using the parent directory for Debian build artifacts is problematic, for example breaking actions/upload-artifact:
           # https://github.com/actions/upload-artifact/issues/176
           path: srcpkg
-          ref: ${{ steps.determine_checkout_ref.outputs.source_ref }}
+          ref: ${{ needs.resolve.outputs.source_ref }}
       - uses: actions/checkout@v6
         with:
           repository: qualcomm-linux/debusine-action
-          ref: main
+          ref: ${{ needs.resolve.outputs.debusine_action_ref }}
           path: debusine-action
-      - id: build
-        name: Build
+      - name: Prepare release
+        if: ${{ inputs.release }}
         env:
-          RELEASE: ${{ inputs.release }}
-          SUITE: ${{ steps.map_suite.outputs.suite }}
-          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
-          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
-          JOB_INDEX: ${{ inputs.job_index }}
-          DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
-          DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE}}
-          DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
-          DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
+          SUITE: ${{ needs.resolve.outputs.suite }}
         run: |
           set -ex
-
-          debusine-action/lib/prepare-incus
-          debusine-action/lib/prepare-debusine
-
-          if [ "$RELEASE" = "true" ]; then
-            echo "::group::Prepare release"
-            sudo apt-get install --update --no-install-recommends -y devscripts dpkg-dev git-buildpackage
-            SUITE="$SUITE" debusine-action/lib/prepare-release
-            echo "::endgroup::"
-          fi
-
-          echo "::group::Generate source package"
-          sudo apt-get install --update --no-install-recommends -y devscripts dctrl-tools git-buildpackage
-          SUITE="$SUITE" debusine-action/lib/generate-source-package
-          dcmd sudo incus file push *.changes debusine/root/
-          echo "::endgroup::"
-
-          sudo incus exec debusine env \
-            "GITHUB_REPOSITORY_ID=$GITHUB_REPOSITORY_ID" \
-            "GITHUB_RUN_ID=$GITHUB_RUN_ID" \
-            "GITHUB_RUN_ATTEMPT=$GITHUB_RUN_ATTEMPT" \
-            "JOB_INDEX=$JOB_INDEX" \
-            "DEBUSINE_HOST=$DEBUSINE_HOST" \
-            "DEBUSINE_SCOPE=$DEBUSINE_SCOPE" \
-            "DEBUSINE_USER=$DEBUSINE_USER" \
-            "DEBUSINE_TOKEN=$DEBUSINE_TOKEN" \
-            "SUITE=$SUITE" \
-            debusine-action/lib/build
-          sudo incus exec debusine cat output >> "$GITHUB_OUTPUT"
-      - name: Generate summary
+          debusine-action/lib/prepare-release
+      - id: generate-source-package
+        name: Generate source package
         env:
-          DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
-          DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE}}
-          DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
-          DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
-          DEBUSINE_WORKSPACE: ${{ steps.build.outputs.workspace }}
-          SRCPKG_NAME: ${{ steps.build.outputs.srcpkg_name }}
-          SRCPKG_VERSION: ${{ steps.build.outputs.srcpkg_version }}
-          SUITE: ${{ steps.map_suite.outputs.suite }}
+          SUITE: ${{ needs.resolve.outputs.suite }}
         run: |
-          debusine-action/lib/generate-step-summary
+          set -ex
+          debusine-action/lib/generate-source-package
+
+      - name: Stage source package files
+        env:
+          CHANGES_PATH: ${{ steps.generate-source-package.outputs.changes_path }}
+        run: |
+          set -eux
+          mkdir source-package
+          dcmd cp "$CHANGES_PATH" source-package/
+
+      - name: Upload source package files
+        uses: actions/upload-artifact@v7
+        with:
+          name: source-package
+          path: source-package
+          if-no-files-found: error
+
       - name: Upload release bundle
         if: ${{ inputs.release }}
         uses: actions/upload-artifact@v7
@@ -169,54 +170,113 @@ jobs:
           path: release.bundle
           if-no-files-found: error
 
+  build:
+    name: Build in Debusine
+    needs: [resolve, source-package]
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/qualcomm-linux/debusine-pkg-builder:trixie
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      workspace: ${{ steps.build.outputs.workspace }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: qualcomm-linux/debusine-action
+          ref: ${{ needs.resolve.outputs.debusine_action_ref }}
+          path: debusine-action
+
+      - name: Download source package files
+        uses: actions/download-artifact@v8
+        with:
+          name: source-package
+          path: source-package
+
+      - name: Restore source package files to workspace root
+        run: |
+          set -eux
+          find source-package -maxdepth 1 -type f -exec mv -t . {} +
+          rmdir source-package
+
+      - id: build
+        name: Build in Debusine
+        env:
+          SUITE: ${{ needs.resolve.outputs.suite }}
+          GITHUB_REPOSITORY_ID: ${{ github.repository_id }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+          JOB_INDEX: ${{ inputs.job_index }}
+          DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
+          DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE }}
+          DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
+          DEBUSINE_PARENT_WORKSPACE: ${{ inputs.debusine-parent-workspace }}
+        run: |
+          set -ex
+          debusine-action/lib/build
+          cat output >> "$GITHUB_OUTPUT"
+
+      - name: Generate summary
+        env:
+          DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
+          DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE }}
+          DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
+          DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
+          DEBUSINE_WORKSPACE: ${{ steps.build.outputs.workspace }}
+          SRCPKG_NAME: ${{ needs.source-package.outputs.srcpkg_name }}
+          SRCPKG_VERSION: ${{ needs.source-package.outputs.srcpkg_version }}
+          SUITE: ${{ needs.resolve.outputs.suite }}
+        run: |
+          debusine-action/lib/generate-step-summary
+
   release:
     name: Release
     if: ${{ inputs.release }}
-    needs: [build]
+    needs: [resolve, source-package, build]
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/qualcomm-linux/debusine-pkg-builder:trixie
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      options: --user root
     environment: Production
     permissions:
       contents: write
       deployments: write
+      packages: read
     steps:
       - uses: actions/checkout@v6
         with:
           # Using the parent directory for Debian build artifacts is problematic, for example breaking actions/upload-artifact:
           # https://github.com/actions/upload-artifact/issues/176
           path: srcpkg
-          ref: ${{ needs.build.outputs.source_ref }}
+          ref: ${{ needs.resolve.outputs.source_ref }}
       - uses: actions/checkout@v6
         with:
           repository: qualcomm-linux/debusine-action
-          ref: main
+          ref: ${{ needs.resolve.outputs.debusine_action_ref }}
           path: debusine-action
       - name: Download release bundle
         uses: actions/download-artifact@v8
         with:
           name: release-bundle
+          path: .
       - name: Release
         env:
           DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
           DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE}}
           DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_RELEASE_TOKEN }}
           DEBUSINE_CI_WORKSPACE: ${{ needs.build.outputs.workspace }}
-          SRCPKG_NAME: ${{ needs.build.outputs.srcpkg_name }}
-          SRCPKG_VERSION: ${{ needs.build.outputs.srcpkg_version}}
-          SUITE: ${{ needs.build.outputs.suite }}
+          SRCPKG_NAME: ${{ needs.source-package.outputs.srcpkg_name }}
+          SRCPKG_VERSION: ${{ needs.source-package.outputs.srcpkg_version}}
+          SUITE: ${{ needs.resolve.outputs.suite }}
         run: |
           set -ex
-
-          sudo apt-get install --update --no-install-recommends -y devscripts dpkg-dev python3
-          debusine-action/lib/prepare-incus
-          debusine-action/lib/prepare-debusine
-          sudo incus exec debusine env \
-            "DEBUSINE_HOST=$DEBUSINE_HOST" \
-            "DEBUSINE_SCOPE=$DEBUSINE_SCOPE" \
-            "DEBUSINE_TOKEN=$DEBUSINE_TOKEN" \
-            "DEBUSINE_CI_WORKSPACE=$DEBUSINE_CI_WORKSPACE" \
-            "SRCPKG_NAME=$SRCPKG_NAME" \
-            "SRCPKG_VERSION=$SRCPKG_VERSION" \
-            "SUITE=$SUITE" \
-            debusine-action/lib/release
-
+          debusine-action/lib/release
           debusine-action/lib/push-release
