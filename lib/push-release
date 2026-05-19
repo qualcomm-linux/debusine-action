@@ -36,9 +36,9 @@ case "$next_version" in
     *~) next_dev_version="$next_version" ;;
     *) next_dev_version="${next_version}~" ;;
 esac
-dch -b -v "$next_dev_version" 'Unreleased changes'
+DEBFULLNAME="Release Bot" DEBEMAIL="noreply@release-bot.invalid" dch -b -v "$next_dev_version" 'Unreleased changes'
 export GIT_AUTHOR_NAME="Release Bot"
-export GIT_AUTHOR_EMAIL="noreply@example.com"
+export GIT_AUTHOR_EMAIL="noreply@release-bot.invalid"
 export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
 export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
 git commit -m"d/changelog: open $next_version" debian/changelog
