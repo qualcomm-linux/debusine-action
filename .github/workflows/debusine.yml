@@ -28,7 +28,6 @@ on:
         description: Parent Debusine workspace used to create per-run CI child workspaces
         type: string
         required: false
-        default: qli-ci
       job_index:
         # This is used to generate a unique Debusine child workspace name for
         # each expansion of the matrix

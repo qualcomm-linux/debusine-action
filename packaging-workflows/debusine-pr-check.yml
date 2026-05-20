@@ -27,7 +27,7 @@ jobs:
       target_branch: ${{ github.event.workflow_run.pull_requests[0].base.ref }}
       release: false
       debusine-action-ref: main
-      debusine-parent-workspace: ${{ vars.DEBUSINE_PARENT_WORKSPACE || 'qli-ci' }}
+      debusine-parent-workspace: ${{ vars.DEBUSINE_PARENT_WORKSPACE }}
     secrets:
       DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
       DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}

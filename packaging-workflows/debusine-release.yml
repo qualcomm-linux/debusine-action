@@ -27,7 +27,7 @@ jobs:
       source_ref: refs/heads/${{ github.ref_name }}
       release: ${{ inputs.release }}
       debusine-action-ref: main
-      debusine-parent-workspace: ${{ vars.DEBUSINE_PARENT_WORKSPACE || 'qli-ci' }}
+      debusine-parent-workspace: ${{ vars.DEBUSINE_PARENT_WORKSPACE }}
     permissions:
       contents: write
       deployments: write

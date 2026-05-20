@@ -54,7 +54,7 @@ jobs:
       source_ref: refs/heads/${{ matrix.target_branch }}
       release: false
       debusine-action-ref: main
-      debusine-parent-workspace: ${{ vars.DEBUSINE_PARENT_WORKSPACE || 'qli-ci' }}
+      debusine-parent-workspace: ${{ vars.DEBUSINE_PARENT_WORKSPACE }}
       job_index: ${{ strategy.job-index }}
     permissions:
       contents: write
