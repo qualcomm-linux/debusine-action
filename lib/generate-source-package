@@ -38,11 +38,11 @@ set -o pipefail
 # 2. Install build dependencies before building the source package
 
 echo "::group::Prepare source package"
-if [ -f "srcpkg/debian/source/format" -a "$(cat srcpkg/debian/source/format)" = "3.0 (quilt)" ] && [ ! -f "srcpkg/debian/gbp.conf" ]; then
-    # Non-gbp quilt path: source tree was prepared externally (e.g.
-    # pkg-linux-qcom). There is no gbp.conf, no pristine-tar branch, and no
-    # upstream tag. Build the source package directly using dpkg-buildpackage
-    # -S after creating the orig tarball from the source tree.
+if [ "${DEBUSINE_ASSEMBLE_ORIG:-false}" = "true" ]; then
+    # Caller has requested direct orig tarball assembly: the source tree was
+    # prepared externally and has no upstream tarball available via gbp or
+    # pristine-tar. Create the .orig.tar.gz from the source tree and invoke
+    # dpkg-buildpackage -S directly.
     cd srcpkg
     git config --global --add safe.directory "$(pwd)"
     PKG=$(dpkg-parsechangelog -SSource)
