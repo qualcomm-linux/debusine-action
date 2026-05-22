@@ -16,6 +16,11 @@ set -o pipefail
 # This script is expected to run directly inside a job container that already
 # matches the target suite.
 
+# Note: this script is invoked both by the debusine reusable workflow defined
+# in this repository and by qualcomm-linux/qcom-build-utils. Any interface
+# changes (inputs, outputs, behaviour) must be coordinated across both callers
+# to avoid silent breakage.
+
 # Dependencies:
 #     devscripts
 #     dctrl-tools
@@ -25,6 +30,10 @@ set -o pipefail
 # Inputs:
 #     $PWD/srcpkg/: checked out source tree
 #     $SUITE: target suite to prepare in (eg. 'trixie')
+#     $DEBUSINE_ASSEMBLE_ORIG (optional, default: false): when 'true', create
+#         the .orig.tar.gz directly from the source tree and invoke
+#         dpkg-buildpackage -S, bypassing gbp. Use for source trees assembled
+#         at CI time with no upstream tarball available via gbp or pristine-tar.
 
 # Outputs:
 #     Parent directory: .changes files for source package together with all
@@ -38,15 +47,19 @@ set -o pipefail
 # 2. Install build dependencies before building the source package
 
 echo "::group::Prepare source package"
+cd srcpkg
+git config --global --add safe.directory "$(pwd)"
+cd ..
 if [ "${DEBUSINE_ASSEMBLE_ORIG:-false}" = "true" ]; then
     # Caller has requested direct orig tarball assembly: the source tree was
     # prepared externally and has no upstream tarball available via gbp or
     # pristine-tar. Create the .orig.tar.gz from the source tree and invoke
     # dpkg-buildpackage -S directly.
     cd srcpkg
-    git config --global --add safe.directory "$(pwd)"
-    PKG=$(dpkg-parsechangelog -SSource)
-    VER=$(dpkg-parsechangelog -SVersion)
+    # sed for input sanitization — Debian policy restricts package names to
+    # [a-z0-9][a-z0-9.+-]+ and versions to [A-Za-z0-9.+~:-].
+    PKG=$(dpkg-parsechangelog -SSource|sed 's/[^a-z0-9.+-]//g')
+    VER=$(dpkg-parsechangelog -SVersion|sed 's/[^A-Za-z0-9.+~:-]//g')
     UPSTREAM_VER=$(echo "$VER" | sed 's/-[^-]*$//')
     ORIG_TAR="../${PKG}_${UPSTREAM_VER}.orig.tar.gz"
     echo "Creating orig tarball: ${ORIG_TAR}"
@@ -81,7 +94,6 @@ else
     fi
 
     cd srcpkg
-    git config --global --add safe.directory "$(pwd)"
     gbp buildpackage -S -sa -d -nc --git-builder=dpkg-buildpackage --git-ignore-branch --source-option=--extend-diff-ignore=^\.github -us -uc
     cd ..
 fi
