@@ -23,7 +23,8 @@ jobs:
       options: --user root
     permissions:
       pull-requests: read
-      contents: write 
+      contents: write
+      packages: read
     steps:
 
       - name: Checkout repository
