@@ -34,6 +34,147 @@ parent_workspace=${DEBUSINE_PARENT_WORKSPACE:-qli-ci}
 child_ci_suffix=gh-${GITHUB_REPOSITORY_ID:-0}-${GITHUB_RUN_ID:-0}-${GITHUB_RUN_ATTEMPT:-0}-${JOB_INDEX:-0}
 workspace="${parent_workspace}-${child_ci_suffix}"
 
+normalize_suite() {
+    local suite="$1"
+    if [[ "$suite" == "unstable" ]]; then
+        echo "sid"
+    else
+        echo "$suite"
+    fi
+}
+
+trim_spaces() {
+    local value="$1"
+    value="$(printf '%s' "$value" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    printf '%s' "$value"
+}
+
+yaml_quote() {
+    local value="$1"
+    value="${value//\'/\'\'}"
+    printf "'%s'" "$value"
+}
+
+load_extra_repositories_for_debusine() {
+    local extra_repositories_file="srcpkg/debian/extra-repositories.txt"
+    local target_suite
+    target_suite="$(normalize_suite "${SUITE}")"
+    local yaml_file="$1"
+
+    : > "$yaml_file"
+
+    declare -A seen=()
+    local repo_count=0
+
+    if [[ ! -f "$extra_repositories_file" ]]; then
+        echo "ℹ️ No ${extra_repositories_file} found for Debusine build"
+        return 0
+    fi
+
+    echo "ℹ️ Found ${extra_repositories_file}; loading Debusine extra repositories"
+
+    while IFS= read -r raw_line || [[ -n "$raw_line" ]]; do
+        local line repo_entry suites_csv include_entry
+        line="$(trim_spaces "$raw_line")"
+        [[ -n "$line" ]] || continue
+        [[ "$line" =~ ^# ]] && continue
+        repo_entry="$line"
+
+        if [[ "$line" == \[* ]]; then
+            if [[ "$line" =~ ^\[([^][]+)\][[:space:]]+(.+)$ ]]; then
+                suites_csv="${BASH_REMATCH[1]}"
+                repo_entry="${BASH_REMATCH[2]}"
+                include_entry=false
+                IFS=',' read -ra suite_filters <<< "$suites_csv"
+                for suite_filter in "${suite_filters[@]}"; do
+                    suite_filter="$(trim_spaces "$suite_filter")"
+                    [[ -n "$suite_filter" ]] || continue
+                    suite_filter="$(normalize_suite "$suite_filter")"
+                    if [[ "$suite_filter" == "$target_suite" ]]; then
+                        include_entry=true
+                        break
+                    fi
+                done
+                if [[ "$include_entry" != true ]]; then
+                    echo "ℹ️ Skipping Debusine extra repository entry [${suites_csv}] for suite ${target_suite}"
+                    continue
+                fi
+            else
+                echo "::error::Invalid ${extra_repositories_file} entry '${line}'. Expected '[suite1,suite2] deb ...' or a plain 'deb ...' line."
+                return 1
+            fi
+        fi
+
+        local options_segment url repo_suite components_raw
+        local -a components
+        if [[ "$repo_entry" =~ ^deb[[:space:]]+(\[[^][]+\][[:space:]]+)?([^[:space:]]+)[[:space:]]+([^[:space:]]+)[[:space:]]+(.+)$ ]]; then
+            options_segment="${BASH_REMATCH[1]}"
+            url="${BASH_REMATCH[2]}"
+            repo_suite="${BASH_REMATCH[3]}"
+            components_raw="$(trim_spaces "${BASH_REMATCH[4]}")"
+            read -r -a components <<< "$components_raw"
+            if (( ${#components[@]} == 0 )); then
+                echo "::error::Invalid ${extra_repositories_file} entry '${repo_entry}'. Missing repository components."
+                return 1
+            fi
+        else
+            echo "::error::Invalid ${extra_repositories_file} entry '${repo_entry}'. Expected 'deb [opts] <url> <suite> <components...>'."
+            return 1
+        fi
+
+        local signing_key=""
+        if [[ -n "$options_segment" ]]; then
+            local options
+            options="$(printf '%s' "$options_segment" | sed -E 's/^\[//; s/\][[:space:]]*$//')"
+            for opt in $options; do
+                if [[ "$opt" == signed-by=* ]]; then
+                    local key_path
+                    key_path="${opt#signed-by=}"
+                    if [[ -f "$key_path" ]]; then
+                        signing_key="$(cat "$key_path")"
+                    else
+                        echo "::warning::signed-by key '${key_path}' from '${repo_entry}' is not readable in this environment; Debusine build may fail to authenticate this repository."
+                    fi
+                elif [[ "$opt" == arch=* || "$opt" == trusted=yes ]]; then
+                    echo "::warning::${repo_entry} uses ${opt}, which Debusine extra_repositories does not support directly; ignoring ${opt}."
+                fi
+            done
+        fi
+
+        local dedup_key
+        dedup_key="${url}|${repo_suite}|${components[*]}|$(printf '%s' "$signing_key" | sha256sum | awk '{print $1}')"
+        if [[ -n "${seen[$dedup_key]+x}" ]]; then
+            continue
+        fi
+        seen["$dedup_key"]=1
+
+        if (( repo_count == 0 )); then
+            echo "  extra_repositories:" >> "$yaml_file"
+        fi
+
+        echo "    - url: $(yaml_quote "$url")" >> "$yaml_file"
+        echo "      suite: $(yaml_quote "$repo_suite")" >> "$yaml_file"
+        echo "      components:" >> "$yaml_file"
+        for component in "${components[@]}"; do
+            echo "        - $(yaml_quote "$component")" >> "$yaml_file"
+        done
+        if [[ -n "$signing_key" ]]; then
+            echo "      signing_key: |-" >> "$yaml_file"
+            while IFS= read -r key_line || [[ -n "$key_line" ]]; do
+                echo "        $key_line" >> "$yaml_file"
+            done <<< "$signing_key"
+        fi
+
+        repo_count=$((repo_count + 1))
+    done < "$extra_repositories_file"
+
+    if (( repo_count == 0 )); then
+        echo "ℹ️ ${extra_repositories_file} has no active entries for Debusine suite ${target_suite}"
+    else
+        echo "ℹ️ Loaded ${repo_count} Debusine extra repository entries"
+    fi
+}
+
 mkdir -p ~/.config/debusine/client
 ( umask 077; cat > ~/.config/debusine/client/config.ini <<EOF
 [General]
@@ -52,7 +193,12 @@ echo "Workflow start output: $workflow_start_output" >&2
 workflow_id=$(echo "$workflow_start_output"|yq -r .id)
 debusine-action/lib/poll_workflow.py "$workflow_id"
 debusine archive suite create --architecture all --architecture amd64 --architecture arm64 ${SUITE}
-debusine workflow-template create debian_pipeline debian-pipeline <<END
+
+extra_repositories_yaml=$(mktemp)
+load_extra_repositories_for_debusine "$extra_repositories_yaml"
+
+debian_pipeline_yaml=$(mktemp)
+cat > "$debian_pipeline_yaml" <<END
 static_parameters:
   vendor: debian
   sbuild_environment_variant: buildd
@@ -64,9 +210,18 @@ static_parameters:
   enable_blhc: false
   codename: $SUITE
   suite: $SUITE@debian:suite
+END
+
+if [[ -s "$extra_repositories_yaml" ]]; then
+    cat "$extra_repositories_yaml" >> "$debian_pipeline_yaml"
+fi
+
+cat >> "$debian_pipeline_yaml" <<END
 runtime_parameters:
   source_artifact: any
 END
+
+debusine workflow-template create debian_pipeline debian-pipeline < "$debian_pipeline_yaml"
 artifact_import_output=$(debusine artifact import-debian --yaml *.dsc)
 echo "Artifact import output: $artifact_import_output" >&2
 artifact_id=$(echo "$artifact_import_output"|yq -r .artifact_id)
