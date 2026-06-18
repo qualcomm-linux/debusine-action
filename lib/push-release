@@ -31,7 +31,8 @@ if [ "$(dpkg-parsechangelog -SDistribution)" = "UNRELEASED" ]; then
 fi
 
 previous_version=$(dpkg-parsechangelog -SVersion)
-next_version=$(../debusine-action/lib/next_qcom_version "$previous_version")
+pkg_version_id="${PACKAGE_VERSION_IDENTIFIER:-qcom}"
+next_version=$(../debusine-action/lib/next_qcom_version "$previous_version" "$pkg_version_id")
 case "$next_version" in
     *~) next_dev_version="$next_version" ;;
     *) next_dev_version="${next_version}~" ;;

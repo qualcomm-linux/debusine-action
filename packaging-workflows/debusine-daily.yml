@@ -24,8 +24,8 @@ jobs:
       - id: set-matrix
         name: Set matrix
         run: |
-          # Define candidate branches (duplicated from workflow_dispatch options in debusine.yml)
-          candidates='["qcom/debian/latest", "qcom/debian/trixie"]'
+          # Define candidate branches
+          candidates='["qli/debian/latest", "qli/debian/trixie", "qli-staging/debian/latest", "qli-staging/debian/trixie", "qcom/debian/latest", "qcom/debian/trixie"]'
 
           # Filter to branches that exist
           existing=()

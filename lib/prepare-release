@@ -14,6 +14,7 @@ set -ex
 
 # Inputs:
 #   $SUITE
+#   $DEBUSINE_TARGET_WORKSPACE
 #   Checked out source tree in $PWD/srcpkg
 
 # Outputs:
@@ -23,6 +24,11 @@ set -ex
 tmpdir=$(mktemp -d)
 cleanup() { rm -rf "$tmpdir"; }
 trap cleanup EXIT
+
+if [ -z "${DEBUSINE_TARGET_WORKSPACE:-}" ]; then
+    echo "DEBUSINE_TARGET_WORKSPACE is not set" >&2
+    exit 1
+fi
 
 cd srcpkg
 
@@ -47,7 +53,7 @@ export GIT_AUTHOR_NAME="Release Bot"
 export GIT_AUTHOR_EMAIL="noreply@example.com"
 export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
 export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
-git commit -m"d/changelog: release $final_release_version" debian/changelog
+git commit -m"d/changelog: release $final_release_version to $DEBUSINE_TARGET_WORKSPACE" debian/changelog
 
-gbp tag --ignore-branch --debian-tag='qcom/debian/%(version)s' --posttag='echo $GBP_TAG > '"$tmpdir/release-tag"
+gbp tag --ignore-branch --debian-tag="${DEBUSINE_TARGET_WORKSPACE}/debian/%(version)s" --posttag='echo $GBP_TAG > '"$tmpdir/release-tag"
 git bundle create ../release.bundle "HEAD^..refs/tags/$(cat "$tmpdir/release-tag")"
