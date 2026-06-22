@@ -258,7 +258,7 @@ jobs:
         run: |
           debusine-action/lib/generate-step-summary
 
-      - name: Generate sources JSON
+      - name: Generate sources tar
         env:
           DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
           DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE }}
@@ -266,15 +266,25 @@ jobs:
           DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
           DEBUSINE_WORKSPACE: ${{ steps.build.outputs.workspace }}
           SUITE: ${{ needs.resolve.outputs.suite }}
-          OUTPUT: sources.json
+          SRCPKG_NAME: ${{ needs.source-package.outputs.srcpkg_name }}
+          SRCPKG_VERSION: ${{ needs.source-package.outputs.srcpkg_version }}
         run: |
-          debusine-action/lib/generate-sources-json
+          debusine-action/lib/generate-sources-tar
 
-      - name: Upload sources JSON
+      - name: Upload sources files
         uses: actions/upload-artifact@v7
         with:
-          name: sources-json
-          path: sources.json
+          name: qli-apt-sources
+          path: |
+            qli.sources
+            qli-ci.sources
+          if-no-files-found: error
+
+      - name: Upload sources metadata
+        uses: actions/upload-artifact@v7
+        with:
+          name: sources-metadata
+          path: metadata.json
           if-no-files-found: error
 
   AXIOM_Check:
