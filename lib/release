@@ -60,6 +60,7 @@ binary_artifacts:
   category: debian:binary-package
   collection: ${suite_id}@collections
 target_suite: ${SUITE}@debian:suite
+unembargo: true
 END
 )
 echo "Workflow start output: $workflow_start_output" >&2
