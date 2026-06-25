@@ -44,8 +44,11 @@ the current `pkg-*` Debusine workflow model.
 - Source package artifacts are staged via a named `source-package/` directory
   artifact and restored in the build job before calling `lib/build`.
 - Branch-to-suite resolution is explicit in `resolve`:
-  - `qcom/debian/latest` -> `forky`
-  - `qcom/debian/trixie` -> `trixie`
+  - `qli/debian/latest`, `qli-staging/debian/latest`, or `qcom/debian/latest` (transitional) -> `forky`
+  - `qli/debian/trixie`, `qli-staging/debian/trixie`, or `qcom/debian/trixie` (transitional) -> `trixie`
+- Branch prefix also determines the package version string identifier:
+  - `qli/` or `qcom/` (transitional) -> `qli`
+  - `qli-staging/` -> `qli+staging`
 
 ## Important Active Contracts
 
@@ -99,7 +102,7 @@ Current intended placement:
 - default branch:
   - `debusine-daily.yml`
   - `debusine-pr-check.yml`
-- packaging branches (`qcom/debian/*`):
+- packaging branches (`qli/debian/*` or `qli-staging/debian/*`; `qcom/debian/*` also continues to be accepted for backwards compatibility during the transition):
   - `debusine-pr-hook.yml`
   - `debusine-release.yml`
 

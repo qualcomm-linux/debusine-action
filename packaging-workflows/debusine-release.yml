@@ -20,7 +20,7 @@ on:
 jobs:
   debusine:
     name: Debusine
-    if: startsWith(github.ref_name, 'qcom/debian/')
+    if: startsWith(github.ref_name, 'qli/debian/') || startsWith(github.ref_name, 'qli-staging/debian/') || startsWith(github.ref_name, 'qcom/debian/')
     uses: qualcomm-linux/debusine-action/.github/workflows/debusine.yml@main
     with:
       target_branch: ${{ github.ref_name }}

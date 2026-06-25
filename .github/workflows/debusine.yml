@@ -59,6 +59,9 @@ jobs:
       suite: ${{ steps.map_suite.outputs.suite }}
       source_ref: ${{ steps.determine_checkout_ref.outputs.source_ref }}
       debusine_action_ref: ${{ inputs.debusine-action-ref }}
+      debusine_target_workspace: ${{ steps.map_suite.outputs.debusine_target_workspace }}
+      package_version_identifier: ${{ steps.map_suite.outputs.package_version_identifier }}
+      environment: ${{ steps.map_suite.outputs.environment }}
     steps:
       - id: map_suite
         name: Map branch to suite
@@ -67,21 +70,37 @@ jobs:
           TARGET_BRANCH: ${{ inputs.target_branch }}
         with:
           script: |
-            const suiteMap = {
-              "qcom/debian/latest": "forky",
-              "qcom/debian/trixie": "trixie",
+            const suffixToSuite = {
+              "debian/latest": "forky",
+              "debian/trixie": "trixie",
             };
 
-            const targetBranch = process.env.TARGET_BRANCH;
-            const suite = suiteMap[targetBranch];
+            const prefixMap = [
+              { prefix: 'qli-staging/', workspace: 'qli-staging', identifier: 'qli+staging', environment: 'Staging'    },
+              { prefix: 'qli/',         workspace: 'qli',          identifier: 'qli',         environment: 'Production' },
+              { prefix: 'qcom/',        workspace: 'qli',          identifier: 'qli',         environment: 'Production' },
+            ];
 
+            const targetBranch = process.env.TARGET_BRANCH;
+            const prefixEntry = prefixMap.find(e => targetBranch.startsWith(e.prefix));
+            if (!prefixEntry) {
+              core.setFailed(`Unknown target branch prefix: ${targetBranch}. Branch must start with one of: ${prefixMap.map(e => e.prefix).join(', ')}`);
+              return;
+            }
+            const { workspace, identifier } = prefixEntry;
+            const branchSuffix = targetBranch.slice(prefixEntry.prefix.length);
+
+            const suite = suffixToSuite[branchSuffix];
             if (!suite) {
-              core.setFailed(`Unknown target branch: ${targetBranch}. Valid branches are: ${Object.keys(suiteMap).join(', ')}`);
+              core.setFailed(`Unknown branch suffix: ${branchSuffix}. Valid suffixes are: ${Object.keys(suffixToSuite).join(', ')}`);
               return;
             }
 
             core.setOutput('suite', suite);
-            core.info(`Mapped branch '${targetBranch}' to suite '${suite}'`);
+            core.setOutput('debusine_target_workspace', workspace);
+            core.setOutput('package_version_identifier', identifier);
+            core.setOutput('environment', prefixEntry.environment);
+            core.info(`Mapped branch '${targetBranch}' to suite '${suite}', workspace '${workspace}', identifier '${identifier}', environment '${prefixEntry.environment}'`);
       - id: determine_checkout_ref
         name: Determine the ref of the packaging to build
         uses: actions/github-script@v9
@@ -136,6 +155,7 @@ jobs:
         if: ${{ inputs.release }}
         env:
           SUITE: ${{ needs.resolve.outputs.suite }}
+          DEBUSINE_TARGET_WORKSPACE: ${{ needs.resolve.outputs.debusine_target_workspace }}
         run: |
           set -ex
           debusine-action/lib/prepare-release
@@ -228,6 +248,7 @@ jobs:
           DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
           DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
           DEBUSINE_WORKSPACE: ${{ steps.build.outputs.workspace }}
+          DEBUSINE_TARGET_WORKSPACE: ${{ needs.resolve.outputs.debusine_target_workspace }}
           SRCPKG_NAME: ${{ needs.source-package.outputs.srcpkg_name }}
           SRCPKG_VERSION: ${{ needs.source-package.outputs.srcpkg_version }}
           SUITE: ${{ needs.resolve.outputs.suite }}
@@ -245,7 +266,7 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
       options: --user root
-    environment: Production
+    environment: ${{ needs.resolve.outputs.environment }}
     permissions:
       contents: write
       deployments: write
@@ -273,6 +294,8 @@ jobs:
           DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE}}
           DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_RELEASE_TOKEN }}
           DEBUSINE_CI_WORKSPACE: ${{ needs.build.outputs.workspace }}
+          DEBUSINE_TARGET_WORKSPACE: ${{ needs.resolve.outputs.debusine_target_workspace }}
+          PACKAGE_VERSION_IDENTIFIER: ${{ needs.resolve.outputs.package_version_identifier }}
           SRCPKG_NAME: ${{ needs.source-package.outputs.srcpkg_name }}
           SRCPKG_VERSION: ${{ needs.source-package.outputs.srcpkg_version}}
           SUITE: ${{ needs.resolve.outputs.suite }}

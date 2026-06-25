@@ -11,6 +11,8 @@ name: Debusine PR Hook
 on:
   pull_request:
     branches:
+      - 'qli/debian/**'
+      - 'qli-staging/debian/**'
       - 'qcom/debian/**'
 
 permissions:

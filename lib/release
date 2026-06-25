@@ -19,7 +19,7 @@ set -o pipefail
 #   DEBUSINE_SCOPE
 #   DEBUSINE_TOKEN
 #   DEBUSINE_CI_WORKSPACE
-#   DEBUSINE_TARGET_WORKSPACE (optional, defaults to qli)
+#   DEBUSINE_TARGET_WORKSPACE (optional, defaults to qli-staging)
 #   SRCPKG_NAME
 #   SRCPKG_VERSION
 #   SUITE
@@ -27,7 +27,7 @@ set -o pipefail
 # Outputs:
 #   None
 
-target_workspace=${DEBUSINE_TARGET_WORKSPACE:-qli}
+target_workspace=${DEBUSINE_TARGET_WORKSPACE:-qli-staging}
 
 echo "::group::Release to Debusine ${target_workspace}"
 
@@ -60,6 +60,7 @@ binary_artifacts:
   category: debian:binary-package
   collection: ${suite_id}@collections
 target_suite: ${SUITE}@debian:suite
+unembargo: true
 END
 )
 echo "Workflow start output: $workflow_start_output" >&2

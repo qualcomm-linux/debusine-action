@@ -16,6 +16,7 @@ set -ex
 #   DEBUSINE_USER
 #   DEBUSINE_TOKEN
 #   DEBUSINE_WORKSPACE
+#   DEBUSINE_TARGET_WORKSPACE
 #   SRCPKG_NAME
 #   SRCPKG_VERSION
 #   SUITE
@@ -25,7 +26,7 @@ set -ex
 
 : ${GITHUB_STEP_SUMMARY:=/dev/null}
 
-qli_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/qli/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
+target_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_TARGET_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
 ci_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
 
 cat > "$GITHUB_STEP_SUMMARY" <<END2
@@ -48,15 +49,15 @@ password <API token>
 END
 \`\`\`
 
-## Create \`qli.sources\` for baseline QLI apt repository access
+## Create \`${DEBUSINE_TARGET_WORKSPACE}.sources\` for baseline apt repository access
 \`\`\`
-sudo sh -c 'cat > /etc/apt/sources.list.d/qli.sources' <<END
+sudo sh -c 'cat > /etc/apt/sources.list.d/${DEBUSINE_TARGET_WORKSPACE}.sources' <<END
 Types: deb deb-src
-URIs: https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/qli/
+URIs: https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_TARGET_WORKSPACE}/
 Suites: ${SUITE}
 Components: main
 Signed-By:
-${qli_public_key}
+${target_public_key}
 END
 \`\`\`
 
