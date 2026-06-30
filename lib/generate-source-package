@@ -29,16 +29,15 @@ set -o pipefail
 
 # Inputs:
 #     $PWD/srcpkg/: checked out source tree
-#     $SUITE: target suite to prepare in (eg. 'trixie')
 #     $DEBUSINE_ASSEMBLE_ORIG (optional, default: false): when 'true', create
 #         the .orig.tar.gz directly from the source tree and invoke
 #         dpkg-buildpackage -S, bypassing gbp. Use for source trees assembled
 #         at CI time with no upstream tarball available via gbp or pristine-tar.
 
 # Outputs:
-#     Parent directory: .changes files for source package together with all
-#         referenced files
-#     $GITHUB_OUTPUT (append): srcpkg_name, srcpkg_version
+#     $PWD: .changes file for source package together with all referenced files
+#     $GITHUB_OUTPUT (append): srcpkg_name, srcpkg_version, changes_path,
+#         dsc_path
 
 : ${GITHUB_OUTPUT:=/dev/null}
 
