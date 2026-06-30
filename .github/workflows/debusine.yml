@@ -178,7 +178,7 @@ jobs:
       - name: Upload source package files
         uses: actions/upload-artifact@v7
         with:
-          name: source-package
+          name: source-package-${{ inputs.job_index }}
           path: source-package
           if-no-files-found: error
 
@@ -186,7 +186,7 @@ jobs:
         if: ${{ inputs.release }}
         uses: actions/upload-artifact@v7
         with:
-          name: release-bundle
+          name: release-bundle-${{ inputs.job_index }}
           path: release.bundle
           if-no-files-found: error
 
@@ -215,7 +215,7 @@ jobs:
       - name: Download source package files
         uses: actions/download-artifact@v8
         with:
-          name: source-package
+          name: source-package-${{ inputs.job_index }}
           path: source-package
 
       - name: Restore source package files to workspace root
@@ -286,7 +286,7 @@ jobs:
       - name: Download release bundle
         uses: actions/download-artifact@v8
         with:
-          name: release-bundle
+          name: release-bundle-${{ inputs.job_index }}
           path: .
       - name: Release
         env:
