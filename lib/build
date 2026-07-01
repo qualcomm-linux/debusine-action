@@ -23,6 +23,7 @@ set -o pipefail
 #   DEBUSINE_TOKEN
 #   DEBUSINE_PARENT_WORKSPACE (optional, defaults to qli-ci)
 #   SUITE
+#   EXTRA_BUILD_DEP_WORKSPACES (optional, space-separated workspace names to add as extra_repositories)
 #   .dsc file in current directory
 
 # Outputs:
@@ -52,7 +53,8 @@ echo "Workflow start output: $workflow_start_output" >&2
 workflow_id=$(echo "$workflow_start_output"|yq -r .id)
 debusine-action/lib/poll_workflow.py "$workflow_id"
 debusine archive suite create --architecture all --architecture amd64 --architecture arm64 ${SUITE}
-debusine workflow-template create debian_pipeline debian-pipeline <<END
+_template_yaml=$(mktemp)
+cat > "$_template_yaml" <<END
 static_parameters:
   vendor: debian
   sbuild_environment_variant: buildd
@@ -64,9 +66,19 @@ static_parameters:
   enable_blhc: false
   codename: $SUITE
   suite: $SUITE@debian:suite
+END
+if [ -n "${EXTRA_BUILD_DEP_WORKSPACES:-}" ]; then
+    echo "  extra_repositories:" >> "$_template_yaml"
+    for _ws in $EXTRA_BUILD_DEP_WORKSPACES; do
+        echo "    - suite: //workspace=${_ws}/${SUITE}@debian:suite" >> "$_template_yaml"
+    done
+fi
+cat >> "$_template_yaml" <<END
 runtime_parameters:
   source_artifact: any
 END
+debusine workflow-template create debian_pipeline debian-pipeline < "$_template_yaml"
+rm "$_template_yaml"
 artifact_import_output=$(debusine artifact import-debian --yaml *.dsc)
 echo "Artifact import output: $artifact_import_output" >&2
 artifact_id=$(echo "$artifact_import_output"|yq -r .artifact_id)
