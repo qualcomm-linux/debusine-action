@@ -29,18 +29,36 @@ set -o pipefail
 
 # Inputs:
 #     $PWD/srcpkg/: checked out source tree
-#     $SUITE: target suite to prepare in (eg. 'trixie')
 #     $DEBUSINE_ASSEMBLE_ORIG (optional, default: false): when 'true', create
 #         the .orig.tar.gz directly from the source tree and invoke
 #         dpkg-buildpackage -S, bypassing gbp. Use for source trees assembled
 #         at CI time with no upstream tarball available via gbp or pristine-tar.
+#     $(dirname $0)/watch-allowlist/: (required for bare Debian packaging only)
+#         directory of allowlisted debian/watch files, each stored under a
+#         filename equal to the sha256sum of its contents. The watch file in
+#         srcpkg/debian/watch must match one of these entries exactly before
+#         uscan is permitted to contact any external URL.
 
 # Outputs:
-#     Parent directory: .changes files for source package together with all
-#         referenced files
-#     $GITHUB_OUTPUT (append): srcpkg_name, srcpkg_version
+#     $PWD: .changes file for source package together with all referenced files
+#     $GITHUB_OUTPUT (append): srcpkg_name, srcpkg_version, changes_path,
+#         dsc_path
+#     $PWD/combinedpkg/ (side effect, bare Debian packaging only): the merged
+#         upstream + packaging source tree, left on disk after the build.
 
 : ${GITHUB_OUTPUT:=/dev/null}
+
+is_bare_debian_packaging() {
+    [ -f "srcpkg/debian/source/format" ] || return 1
+    [ "$(cat srcpkg/debian/source/format)" = "3.0 (quilt)" ] || return 1
+    # Top-level entries in srcpkg/ excluding .git must be only 'debian' and
+    # optionally '.github' and '.gitignore'
+    local unexpected
+    unexpected=$(find srcpkg/ -maxdepth 1 -mindepth 1 \
+        ! -name '.git' ! -name '.gitignore' ! -name 'debian' ! -name '.github' -print)
+    [ -z "$unexpected" ] || return 1
+    return 0
+}
 
 # A couple of things we might want to implement in the future:
 # 1. Run as a normal user, not root
@@ -65,6 +83,63 @@ if [ "${DEBUSINE_ASSEMBLE_ORIG:-false}" = "true" ]; then
     echo "Creating orig tarball: ${ORIG_TAR}"
     tar czf "$ORIG_TAR" --exclude=./debian --exclude=./.git .
     dpkg-buildpackage -S -sa -d -nc -us -uc
+    cd ..
+elif is_bare_debian_packaging; then
+    # Bare Debian packaging: srcpkg/ contains only debian/ (and optionally
+    # .github/ and .gitignore), with no upstream source in the repo. Fetch the
+    # upstream orig tarball via uscan, merge it with the packaging checkout,
+    # and build the source package from the combined tree.
+    SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+    WATCH_ALLOWLIST="${SCRIPT_DIR}/watch-allowlist"
+
+    # Verify watch file is allowlisted. The allowlist entry is named by the
+    # sha256sum of the watch file and must match byte-for-byte.
+    if [ ! -d "$WATCH_ALLOWLIST" ]; then
+        echo "watch-allowlist/ directory not found at ${WATCH_ALLOWLIST}" >&2
+        exit 1
+    fi
+    WATCH_SHA=$(sha256sum srcpkg/debian/watch | awk '{print $1}')
+    ALLOWED_WATCH="${WATCH_ALLOWLIST}/${WATCH_SHA}"
+    if ! cmp -s "$ALLOWED_WATCH" srcpkg/debian/watch; then
+        echo "debian/watch is not in the allowlist (${WATCH_SHA})" >&2
+        exit 1
+    fi
+
+    # Fetch the upstream orig tarball matching the current package version.
+    # uscan places the tarball in the current directory (parent of srcpkg/).
+    cd srcpkg
+    # sed for input sanitization — Debian policy restricts package names to
+    # [a-z0-9][a-z0-9.+-]+ and versions to [A-Za-z0-9.+~:-].
+    PKG=$(dpkg-parsechangelog -SSource | sed 's/[^a-z0-9.+-]//g')
+    VER=$(dpkg-parsechangelog -SVersion | sed 's/[^A-Za-z0-9.+~:-]//g')
+    UPSTREAM_VER=$(echo "$VER" | sed 's/-[^-]*$//')
+    uscan --download-current-version
+    cd ..
+
+    # Locate the downloaded orig tarball (format may vary: .gz, .xz, .bz2, .zst).
+    ORIG_TARS=( "${PKG}_${UPSTREAM_VER}.orig.tar."* )
+    if [ "${#ORIG_TARS[@]}" -ne 1 ] || [ ! -f "${ORIG_TARS[0]}" ]; then
+        echo "Expected exactly one orig tarball, found: ${ORIG_TARS[*]}" >&2
+        exit 1
+    fi
+    ORIG_TAR="${ORIG_TARS[0]}"
+
+    # Unpack upstream source into combinedpkg/, stripping the top-level
+    # directory that tarballs conventionally contain.
+    mkdir combinedpkg
+    tar xf "$ORIG_TAR" --strip-components=1 -C combinedpkg/
+
+    # Remove any debian/ from upstream (may be absent, a file, or a directory).
+    rm -rf combinedpkg/debian
+
+    # Overlay the git packaging checkout precisely on top.
+    cd srcpkg
+    git archive HEAD | tar x -C ../combinedpkg/
+    cd ..
+
+    # Build the Debian source package; output goes to $PWD (parent of combinedpkg/).
+    cd combinedpkg
+    dpkg-buildpackage -us -uc -S -sa -nc -d
     cd ..
 else
     if [ -f "srcpkg/debian/source/format" -a "$(cat srcpkg/debian/source/format)" = "3.0 (quilt)" ]; then
