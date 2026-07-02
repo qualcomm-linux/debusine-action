@@ -235,6 +235,7 @@ jobs:
           DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
           DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE }}
           DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
+          DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
           DEBUSINE_PARENT_WORKSPACE: ${{ inputs.debusine-parent-workspace }}
           EXTRA_BUILD_DEP_WORKSPACES: ${{ needs.resolve.outputs.extra_build_dep_workspaces }}
         run: |
