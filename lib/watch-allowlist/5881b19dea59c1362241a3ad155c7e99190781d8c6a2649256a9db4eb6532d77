@@ -1,0 +1,20 @@
+version=4
+# The Artifactory web UI (/ui/native/...) is a JavaScript single-page app
+# that uscan cannot parse, and the plain directory listing under
+# /artifactory/.../gfx-adreno.le.0.0/<build>/ only lets uscan look inside a
+# single (newest) build dir -- so an older tarball living in an older build
+# would never be found.
+#
+# Instead we query Artifactory's artifact search REST API, which is reachable
+# anonymously and returns a single flat JSON page listing every matching
+# tarball across all build dirs at once. uscan parses it in plain text mode
+# and picks the highest file version, regardless of which build it lives in.
+#
+# The search results point at api/storage/<repo>-cache/... metadata URIs;
+# Downloadurlmangle rewrites those into the real, downloadable artifact URL.
+# Matching-Pattern is restricted to prebuilt_trixie/ tarballs.
+opts=searchmode=plain,\
+downloadurlmangle=s%/api/storage/qsc_releases-cache/%/qsc_releases/%,\
+filenamemangle=s/qcom-adreno/adreno/; \
+https://qartifactory-edge.qualcomm.com/artifactory/api/search/artifact?name=qcom-adreno \
+https://qartifactory-edge.qualcomm.com/artifactory/api/storage/qsc_releases-cache/software/chip/component/gfx-adreno\.le\.0\.0/[\d.]+/prebuilt_trixie/qcom-adreno_@ANY_VERSION@_arm64.tar.gz
