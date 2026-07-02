@@ -55,7 +55,7 @@ sudo sh -c 'cat > /etc/apt/sources.list.d/${DEBUSINE_TARGET_WORKSPACE}.sources' 
 Types: deb deb-src
 URIs: https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_TARGET_WORKSPACE}/
 Suites: ${SUITE}
-Components: main
+Components: main contrib non-free non-free-firmware
 Signed-By:
 ${target_public_key}
 END
@@ -67,7 +67,7 @@ sudo sh -c 'cat > /etc/apt/sources.list.d/qli-ci.sources' <<END
 Types: deb deb-src
 URIs: https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/
 Suites: ${SUITE}
-Components: main
+Components: main contrib non-free non-free-firmware
 Signed-By:
 ${ci_public_key}
 END
