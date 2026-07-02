@@ -2,5 +2,6 @@ version=4
 
 opts=searchmode=plain,\
 downloadurlmangle=s%/api/storage/qsc_releases-cache/%/qsc_releases/%,\
+filenamemangle=s/qcom-diag-router/qcom-diag-router/; \
 https://qartifactory-edge.qualcomm.com/artifactory/api/search/artifact?name=qcom-diag \
 https://qartifactory-edge\.qualcomm\.com/artifactory/api/storage/qsc_releases-cache/software/chip/component/core-technologies\.qclinux\.0\.0/260416.1/prebuilt_trixie/qcom-diag-router_@ANY_VERSION@_arm64@ARCHIVE_EXT@
