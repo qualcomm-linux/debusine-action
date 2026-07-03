@@ -21,21 +21,34 @@ set -ex
 #   SRCPKG_NAME
 #   SRCPKG_VERSION
 #   SUITE
+#   BUILD_RESULT (success|failure|cancelled)
 
 # Outputs:
 #   $GITHUB_STEP_SUMMARY: summary output for the web UI
 
 : ${GITHUB_STEP_SUMMARY:=/dev/null}
 
-target_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_TARGET_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
-ci_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
+if [ "${BUILD_RESULT}" = "success" ]; then
+    build_status="successful"
+else
+    build_status="failed"
+fi
+
+if [ "${BUILD_RESULT}" = "success" ]; then
+    target_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_TARGET_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
+    ci_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
+fi
 
 cat > "$GITHUB_STEP_SUMMARY" <<END2
-**Build of $SRCPKG_NAME (\`$SRCPKG_VERSION\`) successful.**
+**Build of $SRCPKG_NAME (\`$SRCPKG_VERSION\`) ${build_status}.**
 
 # Debusine workspace
 
 Build logs and artifacts are available directly from https://${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/work-request/${DEBUSINE_WORKFLOW_ID}/ (SSO login required).
+END2
+
+if [ "${BUILD_RESULT}" = "success" ]; then
+    cat >> "$GITHUB_STEP_SUMMARY" <<END2
 
 # apt access
 
@@ -74,3 +87,4 @@ ${ci_public_key}
 END
 \`\`\`
 END2
+fi

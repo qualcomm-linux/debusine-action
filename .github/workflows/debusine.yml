@@ -242,9 +242,9 @@ jobs:
         run: |
           set -ex
           debusine-action/lib/build
-          cat output >> "$GITHUB_OUTPUT"
 
       - name: Generate summary
+        if: ${{ !cancelled() }}
         env:
           DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
           DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE }}
@@ -256,6 +256,7 @@ jobs:
           SRCPKG_NAME: ${{ needs.source-package.outputs.srcpkg_name }}
           SRCPKG_VERSION: ${{ needs.source-package.outputs.srcpkg_version }}
           SUITE: ${{ needs.resolve.outputs.suite }}
+          BUILD_RESULT: ${{ steps.build.outcome }}
         run: |
           debusine-action/lib/generate-step-summary
 

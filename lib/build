@@ -28,7 +28,8 @@ set -o pipefail
 #   .dsc file in current directory
 
 # Outputs:
-#   Output file `output` suitable for $GITHUB_OUTPUT containing `workspace`
+#   ${GITHUB_OUTPUT:-output}: workspace, workflow_id (written before poll so they
+#     survive a poll failure)
 
 echo "::group::Build in Debusine"
 
@@ -127,8 +128,12 @@ artifact_id=$(echo "$artifact_import_output"|yq -r .artifact_id)
 workflow_start_output=$(echo "source_artifact: ${artifact_id}@artifacts"|debusine workflow start --yaml debian-pipeline)
 echo "Workflow start output: $workflow_start_output" >&2
 workflow_id=$(echo "$workflow_start_output"|yq -r .id)
+
+# Emit outputs before polling so they survive a poll failure
+: ${GITHUB_OUTPUT:=output}
+echo "workspace=$workspace" >> "$GITHUB_OUTPUT"
+echo "workflow_id=$workflow_id" >> "$GITHUB_OUTPUT"
+
 debusine-action/lib/poll_workflow.py "$workflow_id"
 
-echo "workspace=$workspace" > output
-echo "workflow_id=$workflow_id" >> output
 echo "::endgroup::"
