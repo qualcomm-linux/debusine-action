@@ -85,7 +85,15 @@ workflow_start_output=$(echo "suffix: $child_ci_suffix"|debusine workflow start 
 echo "Workflow start output: $workflow_start_output" >&2
 workflow_id=$(echo "$workflow_start_output"|yq -r .id)
 debusine-action/lib/poll_workflow.py "$workflow_id"
-debusine archive suite create --architecture all --architecture amd64 --architecture arm64 ${SUITE}
+debusine archive suite create \
+    --architecture all \
+    --architecture amd64 \
+    --architecture arm64 \
+    --component main \
+    --component contrib \
+    --component non-free \
+    --component non-free-firmware \
+    ${SUITE}
 _template_yaml=$(mktemp)
 cat > "$_template_yaml" <<END
 static_parameters:
