@@ -62,6 +62,7 @@ jobs:
       debusine_target_workspace: ${{ steps.map_suite.outputs.debusine_target_workspace }}
       package_version_identifier: ${{ steps.map_suite.outputs.package_version_identifier }}
       environment: ${{ steps.map_suite.outputs.environment }}
+      extra_build_dep_workspaces: ${{ steps.map_suite.outputs.extra_build_dep_workspaces }}
     steps:
       - id: map_suite
         name: Map branch to suite
@@ -76,9 +77,9 @@ jobs:
             };
 
             const prefixMap = [
-              { prefix: 'qli-staging/', workspace: 'qli-staging', identifier: 'qli+staging', environment: 'Staging'    },
-              { prefix: 'qli/',         workspace: 'qli',          identifier: 'qli',         environment: 'Production' },
-              { prefix: 'qcom/',        workspace: 'qli',          identifier: 'qli',         environment: 'Production' },
+              { prefix: 'qli-staging/', workspace: 'qli-staging', identifier: 'qli+staging', environment: 'Staging',    extra_build_dep_workspaces: ['qli', 'qli-staging'] },
+              { prefix: 'qli/',         workspace: 'qli',          identifier: 'qli',         environment: 'Production', extra_build_dep_workspaces: ['qli'] },
+              { prefix: 'qcom/',        workspace: 'qli',          identifier: 'qli',         environment: 'Production', extra_build_dep_workspaces: ['qli'] },
             ];
 
             const targetBranch = process.env.TARGET_BRANCH;
@@ -100,6 +101,7 @@ jobs:
             core.setOutput('debusine_target_workspace', workspace);
             core.setOutput('package_version_identifier', identifier);
             core.setOutput('environment', prefixEntry.environment);
+            core.setOutput('extra_build_dep_workspaces', prefixEntry.extra_build_dep_workspaces.join(' '));
             core.info(`Mapped branch '${targetBranch}' to suite '${suite}', workspace '${workspace}', identifier '${identifier}', environment '${prefixEntry.environment}'`);
       - id: determine_checkout_ref
         name: Determine the ref of the packaging to build
@@ -233,7 +235,9 @@ jobs:
           DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
           DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE }}
           DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
+          DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
           DEBUSINE_PARENT_WORKSPACE: ${{ inputs.debusine-parent-workspace }}
+          EXTRA_BUILD_DEP_WORKSPACES: ${{ needs.resolve.outputs.extra_build_dep_workspaces }}
         run: |
           set -ex
           debusine-action/lib/build

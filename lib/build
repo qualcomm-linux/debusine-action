@@ -20,15 +20,49 @@ set -o pipefail
 #   JOB_INDEX
 #   DEBUSINE_HOST
 #   DEBUSINE_SCOPE
+#   DEBUSINE_USER (required for extra_repositories workaround)
 #   DEBUSINE_TOKEN
 #   DEBUSINE_PARENT_WORKSPACE (optional, defaults to qli-ci)
 #   SUITE
+#   EXTRA_BUILD_DEP_WORKSPACES (optional, space-separated workspace names to add as extra_repositories)
 #   .dsc file in current directory
 
 # Outputs:
 #   Output file `output` suitable for $GITHUB_OUTPUT containing `workspace`
 
 echo "::group::Build in Debusine"
+
+# WORKAROUND: older production Debusine does not support the suite lookup syntax
+# (//workspace=...) in extra_repositories. Convert each such entry to the external
+# repository form. Drop this function and its single caller when the production
+# instance is updated.
+apply_extra_repositories_workaround() {
+    local yaml_file="$1"
+    [ -n "${EXTRA_BUILD_DEP_WORKSPACES:-}" ] || return 0
+    local tmpfile ws indent key
+    tmpfile=$(mktemp)
+    while IFS= read -r line; do
+        if printf '%s' "$line" | grep -qE '^ +- suite: //workspace='; then
+            ws=$(printf '%s' "$line" | sed 's|.*//workspace=\([^/]*\)/.*|\1|')
+            indent=$(printf '%s' "$line" | sed 's/^\( *\)- suite:.*/\1/')
+            key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" \
+                "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${ws}/signing-keys.asc") \
+                || { rm -f "$tmpfile"; return 1; }
+            printf '%s- url: https://deb.%s/%s/%s/\n' "$indent" "$DEBUSINE_HOST" "$DEBUSINE_SCOPE" "$ws"
+            printf '%s  suite: %s\n' "$indent" "$SUITE"
+            printf '%s  components:\n' "$indent"
+            printf '%s    - main\n' "$indent"
+            printf '%s    - contrib\n' "$indent"
+            printf '%s    - non-free\n' "$indent"
+            printf '%s    - non-free-firmware\n' "$indent"
+            printf '%s  signing_key: |\n' "$indent"
+            printf '%s\n' "$key" | sed "s/^/${indent}    /"
+        else
+            printf '%s\n' "$line"
+        fi
+    done < "$yaml_file" > "$tmpfile"
+    mv "$tmpfile" "$yaml_file"
+}
 
 parent_workspace=${DEBUSINE_PARENT_WORKSPACE:-qli-ci}
 child_ci_suffix=gh-${GITHUB_REPOSITORY_ID:-0}-${GITHUB_RUN_ID:-0}-${GITHUB_RUN_ATTEMPT:-0}-${JOB_INDEX:-0}
@@ -52,7 +86,8 @@ echo "Workflow start output: $workflow_start_output" >&2
 workflow_id=$(echo "$workflow_start_output"|yq -r .id)
 debusine-action/lib/poll_workflow.py "$workflow_id"
 debusine archive suite create --architecture all --architecture amd64 --architecture arm64 ${SUITE}
-debusine workflow-template create debian_pipeline debian-pipeline <<END
+_template_yaml=$(mktemp)
+cat > "$_template_yaml" <<END
 static_parameters:
   vendor: debian
   sbuild_environment_variant: buildd
@@ -64,9 +99,20 @@ static_parameters:
   enable_blhc: false
   codename: $SUITE
   suite: $SUITE@debian:suite
+END
+if [ -n "${EXTRA_BUILD_DEP_WORKSPACES:-}" ]; then
+    echo "  extra_repositories:" >> "$_template_yaml"
+    for _ws in $EXTRA_BUILD_DEP_WORKSPACES; do
+        echo "    - suite: //workspace=${_ws}/${SUITE}@debian:suite" >> "$_template_yaml"
+    done
+fi
+cat >> "$_template_yaml" <<END
 runtime_parameters:
   source_artifact: any
 END
+apply_extra_repositories_workaround "$_template_yaml"
+debusine workflow-template create debian_pipeline debian-pipeline < "$_template_yaml"
+rm "$_template_yaml"
 artifact_import_output=$(debusine artifact import-debian --yaml *.dsc)
 echo "Artifact import output: $artifact_import_output" >&2
 artifact_id=$(echo "$artifact_import_output"|yq -r .artifact_id)
