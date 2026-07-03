@@ -130,4 +130,5 @@ workflow_id=$(echo "$workflow_start_output"|yq -r .id)
 debusine-action/lib/poll_workflow.py "$workflow_id"
 
 echo "workspace=$workspace" > output
+echo "workflow_id=$workflow_id" >> output
 echo "::endgroup::"

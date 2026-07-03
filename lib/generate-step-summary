@@ -16,6 +16,7 @@ set -ex
 #   DEBUSINE_USER
 #   DEBUSINE_TOKEN
 #   DEBUSINE_WORKSPACE
+#   DEBUSINE_WORKFLOW_ID
 #   DEBUSINE_TARGET_WORKSPACE
 #   SRCPKG_NAME
 #   SRCPKG_VERSION
@@ -34,7 +35,7 @@ cat > "$GITHUB_STEP_SUMMARY" <<END2
 
 # Debusine workspace
 
-Build logs and artifacts are available directly from https://${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/ (SSO login required).
+Build logs and artifacts are available directly from https://${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/work-request/${DEBUSINE_WORKFLOW_ID}/ (SSO login required).
 
 # apt access
 
