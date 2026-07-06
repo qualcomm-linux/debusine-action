@@ -68,12 +68,13 @@ def increment_qcom_version(version: str, identifier: str = 'qli') -> str:
         prefix, debian_rev, ppa_suffix = ppa_match.groups()
         return f"{prefix}{int(debian_rev) + 1}{ppa_suffix}"
 
-    # Check for ~bpo versions - increment the bpo number
-    bpo_match = re.match(r"^(.*?)(~bpo)(\d+)(.*)$", version)
+    # Check for ~bpo versions: ~bpoN+M increments M; ~bpoN increments N
+    bpo_match = re.match(r"^(.*?~bpo)(\d+)(\+(\d+))?$", version)
     if bpo_match:
-        # For ~bpo versions, increment the number after bpo
-        prefix, bpo_type, bpo_num, suffix = bpo_match.groups()
-        return f"{prefix}{bpo_type}{int(bpo_num) + 1}{suffix}"
+        prefix, bpo_num, plus_group, local_num = bpo_match.groups()
+        if local_num is not None:
+            return f"{prefix}{bpo_num}+{int(local_num) + 1}"
+        return f"{prefix}{int(bpo_num) + 1}"
 
     match = _INCREMENTABLE_RE.match(version)
     if not match:

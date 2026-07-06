@@ -27,6 +27,7 @@ from next_qcom_version import increment_qcom_version
         ("1.2qlibuild1", "qli", "1.3qli"),
         ("1.2qli", "qli", "1.3qli"),
         ("1.0.7qli10~bpo1", "qli", "1.0.7qli10~bpo2"),
+        ("1.0.19+ds-0qli3~bpo13+1", "qli", "1.0.19+ds-0qli3~bpo13+2"),
         # --- qcom migration: qcom suffix replaced by qli ---
         ("1.2qcom1", "qli", "1.2qli2"),
         ("1.2-3qcom1", "qli", "1.2-3qli2"),
