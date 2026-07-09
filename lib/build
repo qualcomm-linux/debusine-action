@@ -129,6 +129,9 @@ workflow_start_output=$(echo "source_artifact: ${artifact_id}@artifacts"|debusin
 echo "Workflow start output: $workflow_start_output" >&2
 workflow_id=$(echo "$workflow_start_output"|yq -r .id)
 
+
+echo "::notice::Debusine work request: https://${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${workspace}/work-request/${workflow_id}/ (SSO login required)."
+
 # Emit outputs before polling so they survive a poll failure
 : ${GITHUB_OUTPUT:=output}
 echo "workspace=$workspace" >> "$GITHUB_OUTPUT"
