@@ -44,9 +44,10 @@ default-workspace = ${target_workspace}
 EOF
 )
 
+collection_list_output=$(debusine collection list -w "$DEBUSINE_CI_WORKSPACE" --yaml)
+echo "Collection list output: $collection_list_output" >&2
 suite_id=$(
-  debusine collection list -w "$DEBUSINE_CI_WORKSPACE" --yaml |
-  yq -r --arg suite "$SUITE" '
+  echo "$collection_list_output"|yq -r --arg suite "$SUITE" '
     map(select(.category == "debian:suite" and .name == $suite)) as $m
     | if ($m | length) == 1
       then $m[0].id
