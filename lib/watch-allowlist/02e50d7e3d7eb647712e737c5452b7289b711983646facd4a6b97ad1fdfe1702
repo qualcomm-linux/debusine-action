@@ -1,0 +1,16 @@
+version=4
+# There currently are multiple "software package" releases for the 2.0.1 version:
+#
+# - 260710.1
+#
+# Pick the currently-known last one (260710.1) and force it as an upstream.
+#
+# Note that we are matching the `qcom-sensors-core*` tarball for finding out
+# the upstream version, as the upstream tarball seems to always be named
+# `sensors-prebuilts.tar.gz` without any versioning information.
+#
+opts=searchmode=plain,\
+downloadurlmangle=s%/api/storage/qsc_releases-cache/%/qsc_releases/%;s%qcom-sensors-core_@ANY_VERSION@_arm64.tar.gz%sensors-prebuilts.tar.gz%,\
+filenamemangle=s/qcom-sensors-core/qcom-sensors/ \
+https://qartifactory-edge.qualcomm.com/artifactory/api/search/artifact?name=qcom-sensors-core \
+https://qartifactory-edge.qualcomm.com/artifactory/api/storage/qsc_releases-cache/software/chip/component/sensors.lnx.0.0/260710.1/prebuilt_trixie/qcom-sensors-core_@ANY_VERSION@_arm64.tar.gz
