@@ -26,8 +26,10 @@ set -ex
 
 : ${GITHUB_STEP_SUMMARY:=/dev/null}
 
-target_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_TARGET_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
-ci_public_key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/signing-keys.asc"|sed -e 's/^$/./;s/^/ /')
+. "$(dirname "$0")/sources-common.sh"
+
+target_sources=$(emit_sources "${DEBUSINE_TARGET_WORKSPACE}")
+ci_sources=$(emit_sources "${DEBUSINE_WORKSPACE}")
 
 cat > "$GITHUB_STEP_SUMMARY" <<END2
 **Build of $SRCPKG_NAME (\`$SRCPKG_VERSION\`) successful.**
@@ -52,24 +54,14 @@ END
 ## Create \`${DEBUSINE_TARGET_WORKSPACE}.sources\` for baseline apt repository access
 \`\`\`
 sudo sh -c 'cat > /etc/apt/sources.list.d/${DEBUSINE_TARGET_WORKSPACE}.sources' <<END
-Types: deb deb-src
-URIs: https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_TARGET_WORKSPACE}/
-Suites: ${SUITE}
-Components: main contrib non-free non-free-firmware
-Signed-By:
-${target_public_key}
+${target_sources}
 END
 \`\`\`
 
 ## Create \`qli-ci.sources\` for build-specific apt repository access
 \`\`\`
 sudo sh -c 'cat > /etc/apt/sources.list.d/qli-ci.sources' <<END
-Types: deb deb-src
-URIs: https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/
-Suites: ${SUITE}
-Components: main contrib non-free non-free-firmware
-Signed-By:
-${ci_public_key}
+${ci_sources}
 END
 \`\`\`
 END2

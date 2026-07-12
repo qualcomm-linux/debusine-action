@@ -265,26 +265,20 @@ jobs:
           DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
           DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
           DEBUSINE_WORKSPACE: ${{ steps.build.outputs.workspace }}
+          DEBUSINE_TARGET_WORKSPACE: ${{ needs.resolve.outputs.debusine_target_workspace }}
           SUITE: ${{ needs.resolve.outputs.suite }}
           SRCPKG_NAME: ${{ needs.source-package.outputs.srcpkg_name }}
           SRCPKG_VERSION: ${{ needs.source-package.outputs.srcpkg_version }}
         run: |
           debusine-action/lib/generate-sources-tar
 
-      - name: Upload sources files
+      - name: Upload metadata
         uses: actions/upload-artifact@v7
         with:
-          name: qli-apt-sources
+          name: metadata
           path: |
-            qli.sources
-            qli-ci.sources
-          if-no-files-found: error
-
-      - name: Upload sources metadata
-        uses: actions/upload-artifact@v7
-        with:
-          name: sources-metadata
-          path: metadata.json
+            *.sources
+            metadata.json
           if-no-files-found: error
 
   AXIOM_Check:
