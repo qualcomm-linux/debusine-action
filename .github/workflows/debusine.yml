@@ -205,6 +205,7 @@ jobs:
       packages: read
     outputs:
       workspace: ${{ steps.build.outputs.workspace }}
+      workflow_id: ${{ steps.build.outputs.workflow_id }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -241,19 +242,21 @@ jobs:
         run: |
           set -ex
           debusine-action/lib/build
-          cat output >> "$GITHUB_OUTPUT"
 
       - name: Generate summary
+        if: ${{ !cancelled() }}
         env:
           DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
           DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE }}
           DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
           DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
           DEBUSINE_WORKSPACE: ${{ steps.build.outputs.workspace }}
+          DEBUSINE_WORKFLOW_ID: ${{ steps.build.outputs.workflow_id }}
           DEBUSINE_TARGET_WORKSPACE: ${{ needs.resolve.outputs.debusine_target_workspace }}
           SRCPKG_NAME: ${{ needs.source-package.outputs.srcpkg_name }}
           SRCPKG_VERSION: ${{ needs.source-package.outputs.srcpkg_version }}
           SUITE: ${{ needs.resolve.outputs.suite }}
+          BUILD_RESULT: ${{ steps.build.outcome }}
         run: |
           debusine-action/lib/generate-step-summary
 
