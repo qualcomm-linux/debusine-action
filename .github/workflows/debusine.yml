@@ -142,13 +142,13 @@ jobs:
       srcpkg_name: ${{ steps.generate-source-package.outputs.srcpkg_name }}
       srcpkg_version: ${{ steps.generate-source-package.outputs.srcpkg_version }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Using the parent directory for Debian build artifacts is problematic, for example breaking actions/upload-artifact:
           # https://github.com/actions/upload-artifact/issues/176
           path: srcpkg
           ref: ${{ needs.resolve.outputs.source_ref }}
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: qualcomm-linux/debusine-action
           ref: ${{ needs.resolve.outputs.debusine_action_ref }}
@@ -207,7 +207,7 @@ jobs:
       workspace: ${{ steps.build.outputs.workspace }}
       workflow_id: ${{ steps.build.outputs.workflow_id }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: qualcomm-linux/debusine-action
           ref: ${{ needs.resolve.outputs.debusine_action_ref }}
@@ -277,13 +277,13 @@ jobs:
       deployments: write
       packages: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Using the parent directory for Debian build artifacts is problematic, for example breaking actions/upload-artifact:
           # https://github.com/actions/upload-artifact/issues/176
           path: srcpkg
           ref: ${{ needs.resolve.outputs.source_ref }}
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: qualcomm-linux/debusine-action
           ref: ${{ needs.resolve.outputs.debusine_action_ref }}
