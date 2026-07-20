@@ -47,10 +47,10 @@ dch -v "$final_release_version" ''
 if [ "$SUITE" = "sid" ]; then
     SUITE=unstable
 fi
-dch -r -D "$SUITE" --force-distribution ''
+DEBFULLNAME="Debusine Action GitHub Bot" DEBEMAIL="noreply@bot.invalid" dch -r -D "$SUITE" --force-distribution ''
 
-export GIT_AUTHOR_NAME="Release Bot"
-export GIT_AUTHOR_EMAIL="noreply@example.com"
+export GIT_AUTHOR_NAME="Debusine Action GitHub Bot"
+export GIT_AUTHOR_EMAIL="noreply@bot.invalid"
 export GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
 export GIT_COMMITTER_EMAIL=$GIT_AUTHOR_EMAIL
 git commit -m"d/changelog: release $final_release_version to $DEBUSINE_TARGET_WORKSPACE" debian/changelog
