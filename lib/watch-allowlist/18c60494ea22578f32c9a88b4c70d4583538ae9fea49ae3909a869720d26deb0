@@ -1,0 +1,9 @@
+# TODO: uses prebuilt_resolute
+# TODO: tarball not versioned, static build URL and filenamemangle
+version=4
+opts=searchmode=plain,\
+downloadurlmangle=s%/api/storage/qsc_releases-cache/%/qsc_releases/%,\
+uversionmangle=s/.*/1.0.30/,\
+filenamemangle=s/camx-headers/camx-dev_1.0.30/; \
+https://qartifactory-edge.qualcomm.com/artifactory/api/search/artifact?name=camx-headers \
+https://qartifactory-edge.qualcomm.com/artifactory/api/storage/qsc_releases-cache/software/chip/component/camx\.qclinux\.0\.0/260712/prebuilt_resolute/camx-headers.tar.gz
