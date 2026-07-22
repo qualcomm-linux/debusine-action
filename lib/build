@@ -102,12 +102,7 @@ _parameters_yaml=$(mktemp)
 cat > "$_parameters_yaml" <<END
 vendor: debian
 sbuild_environment_variant: buildd
-# We do want to enable debusine QA, but to get going for now, defer this for later
-# enable_check_installability: false this one is documented but not recognised
-enable_autopkgtest: false
-enable_lintian: false
-enable_piuparts: false
-enable_blhc: false
+lintian_fail_on_severity: none
 codename: $SUITE
 suite: $SUITE@debian:suite
 source_artifact: ${artifact_id}@artifacts
