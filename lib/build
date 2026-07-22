@@ -95,37 +95,35 @@ debusine archive suite create \
     --component non-free \
     --component non-free-firmware \
     ${SUITE}
-_template_yaml=$(mktemp)
-cat > "$_template_yaml" <<END
-static_parameters:
-  vendor: debian
-  sbuild_environment_variant: buildd
-  # We do want to enable debusine QA, but to get going for now, defer this for later
-  # enable_check_installability: false this one is documented but not recognised
-  enable_autopkgtest: false
-  enable_lintian: false
-  enable_piuparts: false
-  enable_blhc: false
-  codename: $SUITE
-  suite: $SUITE@debian:suite
-END
-if [ -n "${EXTRA_BUILD_DEP_WORKSPACES:-}" ]; then
-    echo "  extra_repositories:" >> "$_template_yaml"
-    for _ws in $EXTRA_BUILD_DEP_WORKSPACES; do
-        echo "    - suite: //workspace=${_ws}/${SUITE}@debian:suite" >> "$_template_yaml"
-    done
-fi
-cat >> "$_template_yaml" <<END
-runtime_parameters:
-  source_artifact: any
-END
-apply_extra_repositories_workaround "$_template_yaml"
-debusine workflow-template create debian_pipeline debian-pipeline < "$_template_yaml"
-rm "$_template_yaml"
 artifact_import_output=$(debusine artifact import-debian --yaml *.dsc)
 echo "Artifact import output: $artifact_import_output" >&2
 artifact_id=$(echo "$artifact_import_output"|yq -r .artifact_id)
-workflow_start_output=$(echo "source_artifact: ${artifact_id}@artifacts"|debusine workflow start --yaml debian-pipeline)
+_parameters_yaml=$(mktemp)
+cat > "$_parameters_yaml" <<END
+vendor: debian
+sbuild_environment_variant: buildd
+# We do want to enable debusine QA, but to get going for now, defer this for later
+# enable_check_installability: false this one is documented but not recognised
+enable_autopkgtest: false
+enable_lintian: false
+enable_piuparts: false
+enable_blhc: false
+codename: $SUITE
+suite: $SUITE@debian:suite
+source_artifact: ${artifact_id}@artifacts
+END
+if [ -n "${EXTRA_BUILD_DEP_WORKSPACES:-}" ]; then
+    echo "extra_repositories:" >> "$_parameters_yaml"
+    for _ws in $EXTRA_BUILD_DEP_WORKSPACES; do
+        echo "  - suite: //workspace=${_ws}/${SUITE}@debian:suite" >> "$_parameters_yaml"
+    done
+fi
+apply_extra_repositories_workaround "$_parameters_yaml"
+echo "::group::Generated debian_pipeline parameters:" >&2
+cat "$_parameters_yaml" >&2
+echo "::endgroup::" >&2
+workflow_start_output=$(debusine workflow start --yaml --data "$_parameters_yaml" --no-template debian_pipeline)
+rm "$_parameters_yaml"
 echo "Workflow start output: $workflow_start_output" >&2
 workflow_id=$(echo "$workflow_start_output"|yq -r .id)
 
