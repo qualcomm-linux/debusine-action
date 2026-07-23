@@ -3,10 +3,8 @@
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
-# Written by QGenie / claude-4-6-sonnet
-
 """
-Poll a debusine workflow (work request) until it reaches a terminal state.
+Wait for a debusine workflow (work request) to reach a terminal state.
 
 Usage
 -----
@@ -32,12 +30,10 @@ Exit codes
 """
 
 import argparse
+import asyncio
 import logging
 import os
 import sys
-from collections.abc import Callable
-
-import tenacity
 import yaml
 
 from debusine.client.config import ConfigHandler
@@ -47,26 +43,23 @@ from debusine.client.exceptions import (
     NotFoundError,
     UnexpectedResponseError,
 )
-from debusine.client.models import WorkRequestResponse
+from debusine.client.models import OnWorkRequestCompleted, WorkRequestResponse
 
 # Results that indicate the work request has finished.
 _TERMINAL_RESULTS = {"success", "failure", "error", "skipped"}
 
-# Statuses that mean the work request is still actively progressing and should
-# continue to be polled if no terminal result has been recorded yet.
+# Statuses that mean the work request is still actively progressing.
 _ACTIVE_STATUSES = {"pending", "running"}
 
-# Default adaptive polling parameters (seconds).
-_DEFAULT_WAIT_START = 5
-_DEFAULT_WAIT_INCREMENT = 5
-_DEFAULT_WAIT_MAX = 60
+# Timeout (seconds) for establishing the WebSocket connection.
+_CONNECTION_TIMEOUT = 60
 
 
 def _build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="poll_workflow.py",
         description=(
-            "Poll a debusine workflow (work request) until it completes."
+            "Wait for a debusine workflow (work request) to complete."
         ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
@@ -74,7 +67,7 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         "work_request_id",
         type=int,
         help=(
-            "Work request ID to poll. "
+            "Work request ID to wait for. "
             "Obtain it from the 'id' field of 'debusine workflow start --yaml'."
         ),
     )
@@ -92,24 +85,13 @@ def _build_argument_parser() -> argparse.ArgumentParser:
         help="Path to the debusine client configuration file.",
     )
     parser.add_argument(
-        "--max-interval",
-        type=float,
-        default=_DEFAULT_WAIT_MAX,
-        metavar="SECONDS",
-        help=(
-            "Maximum polling interval in seconds. "
-            "The script starts polling every %(default)s s and increases the "
-            "interval by %(default)s s each attempt up to this cap."
-        ),
-    )
-    parser.add_argument(
         "--timeout",
         type=float,
         default=None,
         metavar="SECONDS",
         help=(
-            "Maximum total time to wait in seconds before giving up. "
-            "If not specified, poll indefinitely."
+            "Maximum total time to wait for the workflow to complete, in seconds. "
+            "If not specified, wait indefinitely."
         ),
     )
     parser.add_argument(
@@ -162,44 +144,111 @@ def _build_debusine_client(args: argparse.Namespace, logger: logging.Logger) -> 
     )
 
 
-def _make_before_sleep_log(
+async def _wait_until_complete(
+    client: Debusine,
     work_request_id: int,
+    *,
+    timeout: float | None,
     logger: logging.Logger,
-) -> "Callable[[tenacity.RetryCallState], None]":
-    """Return a tenacity before_sleep hook that logs the current status."""
+) -> str:
+    """
+    Wait for ``work_request_id`` to reach a terminal state via WebSocket push.
 
-    def _before_sleep(retry_state: tenacity.RetryCallState) -> None:
-        if retry_state.outcome is None:
-            return
-        exc = retry_state.outcome.exception()
-        if exc is not None:
-            logger.info(
-                "Work request %d: connection error (%s). Retrying in %.0f s …",
-                work_request_id,
-                exc,
-                retry_state.next_action.sleep,  # type: ignore[union-attr]
+    Establishes the WebSocket connection and waits for the "connected"
+    acknowledgement before checking the current HTTP status. This ordering
+    ensures no completion is missed: once the server acknowledges the
+    connection it will deliver any subsequent completion over the socket,
+    and the HTTP check catches anything that completed before that point.
+
+    :param client: authenticated Debusine client.
+    :param work_request_id: ID of the work request to wait for.
+    :param timeout: maximum time to wait for the workflow to complete (seconds),
+        or ``None`` to wait indefinitely.
+    :param logger: logger for progress messages.
+    :returns: the result string (e.g. ``"success"``, ``"failure"``).
+    :raises asyncio.TimeoutError: if the workflow timeout is reached.
+    :raises SystemExit(3): on connection timeout or unexpected stream end.
+    """
+    async with client.server_notifications(
+        endpoint="1.0/work-request/on-completed/"
+    ) as sn:
+        loop = asyncio.get_running_loop()
+        connected_event = asyncio.Event()
+        result_future: asyncio.Future[str] = loop.create_future()
+
+        async def _listen() -> None:
+            async for payload in sn.messages():
+                text = payload.get("text")
+                if text == "connected":
+                    logger.info(
+                        "Connected. Waiting for work request %d to complete…",
+                        work_request_id,
+                    )
+                    # Now that the server is tracking completions, check
+                    # whether the work request already finished.
+                    try:
+                        wr = client.work_request_get(work_request_id)
+                    except Exception as exc:
+                        if not result_future.done():
+                            result_future.set_exception(exc)
+                        return
+                    if wr.result in _TERMINAL_RESULTS:
+                        if not result_future.done():
+                            result_future.set_result(wr.result)
+                        return
+                    if wr.status not in _ACTIVE_STATUSES:
+                        # Non-active status with no recognised result (e.g.
+                        # aborted): no push will arrive, so resolve now.
+                        if not result_future.done():
+                            result_future.set_result(wr.result or "error")
+                        return
+                    connected_event.set()
+                elif text == "work_request_completed":
+                    msg = OnWorkRequestCompleted.model_validate(payload)
+                    if msg.work_request_id == work_request_id:
+                        if not result_future.done():
+                            result_future.set_result(msg.result)
+                        return
+                    logger.debug(
+                        "Ignoring completion of work request %d",
+                        msg.work_request_id,
+                    )
+                else:
+                    logger.warning("Unexpected message from server: %r", text)
+            if not result_future.done():
+                result_future.set_exception(
+                    RuntimeError("Server notification stream ended unexpectedly")
+                )
+
+        listen_task = asyncio.create_task(_listen())
+        try:
+            # Wait for "connected" (or immediate result if already complete).
+            connected_wait_task = asyncio.ensure_future(connected_event.wait())
+            done, _ = await asyncio.wait(
+                {connected_wait_task, result_future},
+                timeout=_CONNECTION_TIMEOUT,
+                return_when=asyncio.FIRST_COMPLETED,
             )
-            return
-        wr: WorkRequestResponse = retry_state.outcome.result()
-        elapsed = retry_state.outcome_timestamp - retry_state.start_time
-        logger.info(
-            "Work request %d: status=%s result=%r  (elapsed %.0f s, "
-            "next poll in %.0f s)",
-            work_request_id,
-            wr.status,
-            wr.result or "(pending)",
-            elapsed,
-            retry_state.next_action.sleep,  # type: ignore[union-attr]
-        )
+            if not done:
+                print(
+                    f"Error: timed out waiting for server connection "
+                    f"after {_CONNECTION_TIMEOUT:.0f} s.",
+                    file=sys.stderr,
+                )
+                raise SystemExit(3)
+            if result_future in done:
+                return result_future.result()
 
-    return _before_sleep
-
-
-def _should_continue_polling(wr: WorkRequestResponse) -> bool:
-    """Return True while the work request is still in a non-terminal state."""
-    if wr.result in _TERMINAL_RESULTS:
-        return False
-    return wr.status in _ACTIVE_STATUSES
+            # Connected; now wait for the workflow result.
+            return await asyncio.wait_for(result_future, timeout=timeout)
+        finally:
+            connected_wait_task.cancel()
+            listen_task.cancel()
+            for task in (connected_wait_task, listen_task):
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
 
 def poll_until_complete(
@@ -211,71 +260,28 @@ def poll_until_complete(
     logger: logging.Logger,
 ) -> WorkRequestResponse:
     """
-    Poll ``work_request_id`` until it reaches a terminal state.
+    Wait for ``work_request_id`` to reach a terminal state.
 
-    Uses tenacity to:
-    * Retry on transient connection/HTTP errors (exponential backoff, up to
-      ~30 s between attempts).
-    * Keep polling while the result is still empty, with an incrementing wait
-      that starts at ``_DEFAULT_WAIT_START`` s and grows by
-      ``_DEFAULT_WAIT_INCREMENT`` s each attempt up to ``max_interval`` s.
+    ``max_interval`` is accepted for interface compatibility but ignored;
+    notifications are now push-based via WebSocket.
 
     :param client: authenticated Debusine client.
-    :param work_request_id: ID of the work request to poll.
-    :param max_interval: cap on the polling interval (seconds).
-    :param timeout: maximum total elapsed time before giving up (seconds),
-        or ``None`` to poll indefinitely.
+    :param work_request_id: ID of the work request to wait for.
+    :param max_interval: ignored (kept for interface compatibility).
+    :param timeout: maximum total time to wait in seconds, or ``None``.
     :param logger: logger for progress messages.
     :returns: the final :class:`WorkRequestResponse`.
-    :raises tenacity.RetryError: if the timeout is reached.
     :raises SystemExit(3): on unrecoverable connection errors.
     """
-    # Inner retry: handle transient network errors when fetching the status.
-    # Uses exponential backoff capped at 30 s, up to ~5 minutes total.
-    _fetch_retry = tenacity.retry(
-        retry=tenacity.retry_if_exception_type(
-            (ClientConnectionError, UnexpectedResponseError)
-        ),
-        wait=tenacity.wait_exponential(multiplier=1, min=2, max=30),
-        stop=tenacity.stop_after_delay(300),
-        reraise=True,
+    asyncio.run(
+        _wait_until_complete(
+            client,
+            work_request_id,
+            timeout=timeout,
+            logger=logger,
+        )
     )
-
-    @_fetch_retry
-    def _fetch(wr_id: int) -> WorkRequestResponse:
-        return client.work_request_get(wr_id)
-
-    # Outer retry: keep polling while the work request is still active and no
-    # terminal result has been recorded yet. If the server reports a
-    # non-active/terminal status without a success result (for example an error
-    # state), stop polling and let the caller exit non-zero.
-    # The wait increments from _DEFAULT_WAIT_START up to max_interval.
-    stop_condition: tenacity.stop.stop_base
-    if timeout is not None:
-        stop_condition = tenacity.stop_after_delay(timeout)
-    else:
-        stop_condition = tenacity.stop_never
-
-    before_sleep = _make_before_sleep_log(work_request_id, logger)
-
-    poll_retry = tenacity.retry(
-        retry=tenacity.retry_if_result(_should_continue_polling),
-        wait=tenacity.wait_incrementing(
-            start=_DEFAULT_WAIT_START,
-            increment=_DEFAULT_WAIT_INCREMENT,
-            max=max_interval,
-        ),
-        stop=stop_condition,
-        before_sleep=before_sleep,
-        # Do not wrap the result in RetryError on success; re-raise on stop.
-        reraise=False,
-    )
-
-    @poll_retry
-    def _poll() -> WorkRequestResponse:
-        return _fetch(work_request_id)
-
-    return _poll()
+    return client.work_request_get(work_request_id)
 
 
 def main() -> None:
@@ -288,21 +294,20 @@ def main() -> None:
     client = _build_debusine_client(args, logger)
 
     logger.info(
-        "Polling work request %d (max_interval=%.0f s%s) …",
+        "Waiting for work request %d%s …",
         args.work_request_id,
-        args.max_interval,
-        f", timeout={args.timeout:.0f} s" if args.timeout else "",
+        f" (timeout={args.timeout:.0f} s)" if args.timeout else "",
     )
 
     try:
         final_wr = poll_until_complete(
             client,
             args.work_request_id,
-            max_interval=args.max_interval,
+            max_interval=0,
             timeout=args.timeout,
             logger=logger,
         )
-    except tenacity.RetryError:
+    except asyncio.TimeoutError:
         print(
             f"Timeout: work request {args.work_request_id} did not complete "
             f"within {args.timeout:.0f} s.",
@@ -317,6 +322,9 @@ def main() -> None:
         raise SystemExit(3)
     except (ClientConnectionError, UnexpectedResponseError) as exc:
         print(f"Connection error: {exc}", file=sys.stderr)
+        raise SystemExit(3)
+    except RuntimeError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
         raise SystemExit(3)
 
     logger.info(
