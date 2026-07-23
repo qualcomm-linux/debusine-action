@@ -1,0 +1,6 @@
+#!/bin/sh
+set -ex
+
+./configure-repo "$1"
+./set-repo-secrets "$1"
+./update-workflow-files "$1"

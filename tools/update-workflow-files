@@ -1,0 +1,427 @@
+#!/usr/bin/env python3
+"""
+Ensure workflow files in a pkg-* repository match the current state of
+packaging-workflows/ in a configurable branch (default: main) of
+qualcomm-linux/debusine-action.
+"""
+
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+import argparse
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+from typing import List, Optional
+
+import pygit2
+import github
+from github.PullRequest import PullRequest
+
+DEBUSINE_ACTION_REPO = "qualcomm-linux/debusine-action"
+DEBUSINE_ACTION_DEFAULT_BRANCH = "main"
+
+PACKAGING_BRANCH_ALLOWLIST = [
+    "qcom/debian/trixie",
+    "qcom/debian/latest",
+    "qli/debian/trixie",
+    "qli/debian/latest",
+    "qli-staging/debian/trixie",
+    "qli-staging/debian/latest",
+]
+
+DEFAULT_BRANCH_FILES = [
+    "debusine-daily.yml",
+    "debusine-pr-check.yml",
+    "debusine-pr-hook.yml",
+    "debusine-release.yml",
+    "README.debusine.md",
+]
+
+PACKAGING_BRANCH_FILES = [
+    "debusine-pr-hook.yml",
+    "debusine-release.yml",
+    "README.debusine.md",
+]
+
+PR_TITLE = "Update Debusine CI workflows"
+PR_BODY = (
+    "Update workflow files to match current `packaging-workflows/` "
+    "in qualcomm-linux/debusine-action."
+)
+
+
+class CLIError(Exception):
+    def __init__(self, message: str, exit_code: int = 2):
+        super().__init__(message)
+        self.exit_code = exit_code
+
+
+def get_token() -> str:
+    """Obtain the GitHub token via gh CLI."""
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"], capture_output=True, text=True, check=True
+        )
+        token = result.stdout.strip()
+        if not token:
+            raise CLIError("gh returned an empty token. Run 'gh auth login' first.")
+        return token
+    except subprocess.CalledProcessError:
+        raise CLIError("gh is not authenticated. Run 'gh auth login' first.")
+    except FileNotFoundError:
+        raise CLIError("gh CLI not found. Install it and run 'gh auth login'.")
+
+
+def expand_repo_name(repo_name: str) -> str:
+    """Expand repo name to full owner/repo format."""
+    return f"qualcomm-linux/{repo_name}"
+
+
+def get_expected_files(branch: str) -> List[str]:
+    """Return the list of expected workflow filenames for a given branch."""
+    if branch == "qli-ci":
+        return DEFAULT_BRANCH_FILES
+    return PACKAGING_BRANCH_FILES
+
+
+def chore_branch_name(target_branch: str) -> str:
+    """Return the chore branch name for a given target branch."""
+    return f"chore/pkg-management-update/{target_branch}"
+
+
+def find_differing_files(pkg_workdir: Path, source_dir: Path, files: List[str]) -> List[str]:
+    """Return list of files that are missing or differ from source_dir."""
+    differing = []
+    for filename in files:
+        dest = pkg_workdir / ".github" / "workflows" / filename
+        src = source_dir / filename
+        if not dest.exists() or dest.read_bytes() != src.read_bytes():
+            differing.append(filename)
+    return differing
+
+
+def remote_chore_branch_is_current(
+    pkg_repo: pygit2.Repository,
+    chore_branch: str,
+    source_dir: Path,
+    files: List[str],
+) -> bool:
+    """Return True if the remote chore branch has correct content for all expected files."""
+    ref_name = f"refs/remotes/origin/{chore_branch}"
+    try:
+        ref = pkg_repo.lookup_reference(ref_name)
+    except KeyError:
+        return False
+    tree = ref.peel(pygit2.Tree)
+    try:
+        github_entry = tree[".github"]
+        workflows_tree = pkg_repo.get(pkg_repo.get(github_entry.id)["workflows"].id)
+    except KeyError:
+        return False
+    for filename in files:
+        try:
+            entry = workflows_tree[filename]
+        except KeyError:
+            return False
+        blob = pkg_repo.get(entry.id)
+        expected = (source_dir / filename).read_bytes()
+        if blob.data != expected:
+            return False
+    return True
+
+
+def get_open_pr(
+    gh_repo, head_branch: str, base_branch: str
+) -> Optional[PullRequest]:
+    """Return the open PR created by this script from head_branch to base_branch, or None."""
+    owner = gh_repo.owner.login
+    prs = gh_repo.get_pulls(
+        state="open",
+        head=f"{owner}:{head_branch}",
+        base=base_branch,
+    )
+    for pr in prs:
+        if pr.title == PR_TITLE and pr.body == PR_BODY:
+            return pr
+    return None
+
+
+def checkout_remote_branch(pkg_repo: pygit2.Repository, branch: str) -> None:
+    """Checkout a remote branch, creating a local tracking branch."""
+    remote_ref = pkg_repo.lookup_reference(f"refs/remotes/origin/{branch}")
+    # Create local branch tracking the remote if it doesn't exist
+    local = pkg_repo.lookup_branch(branch, pygit2.GIT_BRANCH_LOCAL)
+    if local is None:
+        local = pkg_repo.create_branch(branch, remote_ref.peel(pygit2.Commit), False)
+    pkg_repo.checkout(local)
+
+
+def process_branch(
+    target_branch: str,
+    pkg_repo: pygit2.Repository,
+    pkg_workdir: Path,
+    source_dir: Path,
+    gh_repo,
+    callbacks: pygit2.RemoteCallbacks,
+    dry_run: bool,
+    direct: bool = False,
+) -> bool:
+    """
+    Process a single branch. Returns True if a change was needed or made.
+    Raises SystemExit on unrecoverable error.
+    """
+    files = get_expected_files(target_branch)
+
+    checkout_remote_branch(pkg_repo, target_branch)
+
+    differing = find_differing_files(pkg_workdir, source_dir, files)
+
+    if not differing:
+        print(f"✓ {target_branch}: up to date")
+        return False
+
+    if dry_run:
+        print(f"❌ {target_branch}: would update: {', '.join(differing)}")
+
+    # Copy updated files into the working tree
+    workflows_dir = pkg_workdir / ".github" / "workflows"
+    workflows_dir.mkdir(parents=True, exist_ok=True)
+    for filename in differing:
+        shutil.copy2(source_dir / filename, workflows_dir / filename)
+
+    # Commit
+    index = pkg_repo.index
+    index.read()
+    for filename in differing:
+        index.add(f".github/workflows/{filename}")
+    index.write()
+    tree_oid = index.write_tree()
+    sig = pygit2.Signature("debusine-action pkg-management", "noreply@github.com")
+    pkg_repo.create_commit(
+        "HEAD",
+        sig,
+        sig,
+        "Update Debusine CI workflows",
+        tree_oid,
+        [pkg_repo.head.target],
+    )
+
+    if dry_run:
+        return True
+
+    if direct:
+        remote = pkg_repo.remotes["origin"]
+        remote.push([f"HEAD:refs/heads/{target_branch}"], callbacks=callbacks)
+        print(f"✓ {target_branch}: pushed directly")
+        return True
+
+    chore_branch = chore_branch_name(target_branch)
+
+    # Check if remote chore branch is already current
+    chore_is_current = remote_chore_branch_is_current(pkg_repo, chore_branch, source_dir, files)
+    open_pr = get_open_pr(gh_repo, chore_branch, target_branch)
+
+    if chore_is_current and open_pr is not None:
+        print(f"✓ {target_branch}: PR already up to date")
+        return False
+
+    if not chore_is_current:
+        remote = pkg_repo.remotes["origin"]
+        remote.push([f"+HEAD:refs/heads/{chore_branch}"], callbacks=callbacks)
+        print(f"✓ {target_branch}: pushed {chore_branch}")
+
+    if open_pr is None:
+        gh_repo.create_pull(
+            title=PR_TITLE,
+            body=PR_BODY,
+            head=chore_branch,
+            base=target_branch,
+        )
+        print(f"✓ {target_branch}: PR created")
+    else:
+        open_pr.create_issue_comment("Branch updated with latest Debusine CI workflows.")
+        print(f"✓ {target_branch}: commented on existing PR #{open_pr.number}")
+
+    return True
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Ensure workflow files in a pkg-* repository match the current state of "
+                    "a configurable branch (default: main) of qualcomm-linux/debusine-action.",
+    )
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "--check",
+        action="store_true",
+        help="report what would change; commits are made locally but not pushed "
+             "and no PRs are created/modified",
+    )
+    mode_group.add_argument(
+        "--pr",
+        action="store_true",
+        help="push changes to a chore branch and file a pull request instead of pushing directly",
+    )
+    mode_group.add_argument(
+        "--direct",
+        action="store_true",
+        help="(deprecated) push changes directly to the target branch; this is now the default",
+    )
+    parser.add_argument(
+        "--no-clean",
+        action="store_true",
+        dest="no_clean",
+        help="do not delete the temporary directory on exit; print its path for inspection",
+    )
+    parser.add_argument(
+        "--debug-source-branch",
+        default=DEBUSINE_ACTION_DEFAULT_BRANCH,
+        metavar="BRANCH",
+        help="branch of qualcomm-linux/debusine-action to use as the source "
+             f"(default: {DEBUSINE_ACTION_DEFAULT_BRANCH!r})",
+    )
+    parser.add_argument(
+        "repo_name",
+        metavar="repo-name",
+        help="repository name with pkg- prefix (e.g., 'pkg-fastrpc')",
+    )
+    parser.add_argument(
+        "branches",
+        nargs="*",
+        metavar="branch",
+        help="branches to process (default: qli-ci plus any packaging branches present in the repo)",
+    )
+    parsed = parser.parse_args()
+    repo_name = parsed.repo_name
+    dry_run = parsed.check
+    if parsed.direct:
+        print(
+            "Warning: --direct is deprecated and will be removed in a future release. "
+            "Direct push is now the default behaviour.",
+            file=sys.stderr,
+        )
+    direct = not parsed.pr
+    no_clean = parsed.no_clean
+    source_branch = parsed.debug_source_branch
+    explicit_branches = parsed.branches
+
+    full_repo = expand_repo_name(repo_name)
+    token = get_token()
+    callbacks = pygit2.RemoteCallbacks(
+        credentials=pygit2.UserPass("x-oauth-basic", token)
+    )
+    gh = github.Github(auth=github.Auth.Token(token))
+
+    changes = False
+
+    with tempfile.TemporaryDirectory(
+        prefix=f"debusine-wf-{repo_name}-", delete=not no_clean
+    ) as tmpdir:
+        tmppath = Path(tmpdir)
+
+        print("Cloning repositories...")
+        try:
+            pygit2.clone_repository(
+                f"https://github.com/{DEBUSINE_ACTION_REPO}.git",
+                str(tmppath / "debusine-action"),
+                checkout_branch=source_branch,
+                callbacks=callbacks,
+            )
+        except pygit2.GitError as e:
+            raise CLIError(f"failed to clone {DEBUSINE_ACTION_REPO}: {e}")
+
+        try:
+            pkg_repo = pygit2.clone_repository(
+                f"https://github.com/{full_repo}.git",
+                str(tmppath / repo_name),
+                callbacks=callbacks,
+            )
+        except pygit2.GitError as e:
+            raise CLIError(f"failed to clone {full_repo}: {e}")
+
+        source_dir = tmppath / "debusine-action" / "packaging-workflows"
+        pkg_workdir = tmppath / repo_name
+
+        if source_branch != DEBUSINE_ACTION_DEFAULT_BRANCH:
+	    # Importing the debug case inline here helps with validation. If
+	    # verifying correctness of the production flow, this allows one to
+	    # exclude this module from consideration.
+            import debug_branch_mod
+            debug_branch_mod.modify_workflow_files(source_dir, source_branch)
+
+        gh_repo = gh.get_repo(full_repo)
+
+        if explicit_branches:
+            all_branches = explicit_branches
+        else:
+            # Verify qli-ci branch exists
+            try:
+                pkg_repo.lookup_reference("refs/remotes/origin/qli-ci")
+            except KeyError:
+                raise CLIError(f"branch 'qli-ci' does not exist in {full_repo}")
+
+            debian_branches = sorted(
+                ref.removeprefix("refs/remotes/origin/")
+                for ref in pkg_repo.references
+                if ref.removeprefix("refs/remotes/origin/") in PACKAGING_BRANCH_ALLOWLIST
+            )
+            all_branches = ["qli-ci"] + debian_branches
+
+        if source_branch != DEBUSINE_ACTION_DEFAULT_BRANCH and repo_name.startswith("pkg-"):
+            managed = {"qli-ci"} | set(PACKAGING_BRANCH_ALLOWLIST)
+            default_set = {
+                ref.removeprefix("refs/remotes/origin/")
+                for ref in pkg_repo.references
+                if ref.removeprefix("refs/remotes/origin/") in managed
+            }
+            overlap = sorted(set(all_branches) & default_set)
+            if overlap:
+                raise CLIError(
+                    "--debug-source-branch cannot be used on a pkg- repository when any branch "
+                    "to process is in the default managed set; conflicting branches: "
+                    + ", ".join(overlap)
+                )
+
+        print(f"Processing branches: {', '.join(all_branches)}")
+        print()
+
+        for branch in all_branches:
+            try:
+                changed = process_branch(
+                    branch,
+                    pkg_repo,
+                    pkg_workdir,
+                    source_dir,
+                    gh_repo,
+                    callbacks,
+                    dry_run,
+                    direct,
+                )
+                if changed:
+                    changes = True
+            except pygit2.GitError as e:
+                raise CLIError(f"error processing branch {branch}: {e}")
+            except CLIError:
+                raise
+            except Exception as e:
+                raise CLIError(f"error processing branch {branch}: {e}")
+
+        if no_clean:
+            print(f"\nTemporary directory: {tmpdir}")
+            print(f"Please remove it when done: rm -rf {tmpdir}")
+
+    if dry_run and changes:
+        print("\nSummary: changes needed (run without --check to apply)")
+        raise CLIError("changes needed", exit_code=1)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except CLIError as e:
+        if e.exit_code != 1:
+            print(f"Error: {e}", file=sys.stderr)
+        sys.exit(e.exit_code)
