@@ -56,6 +56,31 @@ The following secret must be set in the `Production` environment:
 |--------------------------|-----------------------------------|
 | `DEBUSINE_RELEASE_TOKEN` | Debusine release operations token |
 
+### GitHub Environment: Ubuntu Production
+
+A GitHub Actions environment named `Ubuntu Production` must exist with
+the following configuration. This environment is being introduced ahead
+of Ubuntu-specific release workflow changes, in order to align Ubuntu
+release approval with the existing Debian `Production` environment
+model.
+
+#### Required Reviewers
+
+The following users must all be configured as required reviewers:
+
+- `keerthi-go`
+- `abickett`
+- `bjordiscollaku`
+
+#### Administrator Bypass
+
+"Allow administrators to bypass configured protection rules" must be
+disabled.
+
+#### Environment Secret
+
+No environment secret is required in `Ubuntu Production` at this time.
+
 ### GitHub Environment: Staging
 
 A GitHub Actions environment named `Staging` must exist with no

@@ -30,6 +30,24 @@ DEFAULT_ENVIRONMENT = "production"
 # Required reviewers for the Production environment
 REQUIRED_REVIEWERS = ["basak-qcom", "gagath", "lool"]
 
+# Required reviewers for the Ubuntu Production environment
+REQUIRED_REVIEWERS_UBUNTU_PRODUCTION = ["keerthi-go", "abickett", "bjordiscollaku"]
+
+# Environments that require a required-reviewers protection rule, mapped to
+# the reviewers each one must have. This is the single source of truth for
+# which environments get reviewer enforcement; MANAGED_ENVIRONMENTS below
+# (existence-only) is derived from it plus Staging, which has no protection
+# rules.
+REVIEWER_ENFORCED_ENVIRONMENTS = {
+    "Production": REQUIRED_REVIEWERS,
+    "Ubuntu Production": REQUIRED_REVIEWERS_UBUNTU_PRODUCTION,
+}
+
+# Environments that must simply exist (existence is checked/created for all
+# of these; required-reviewer protection rules are enforced separately below
+# for the subset that need them)
+MANAGED_ENVIRONMENTS = list(REVIEWER_ENFORCED_ENVIRONMENTS) + ["Staging"]
+
 # Environment to host mapping
 ENVIRONMENT_HOSTS = {
     "production": "debusine.qualcomm.com",
@@ -156,6 +174,101 @@ def get_user_id(username: str) -> int:
     return data["id"]
 
 
+def ensure_required_reviewers(
+    repo: str, env_name: str, required_reviewers: List[str], dry_run: bool
+) -> bool:
+    """
+    Ensure the named environment has all required_reviewers configured and
+    administrator bypass disabled. Prints status/progress lines matching the
+    existing tool output style.
+
+    Returns True if changes are needed (dry_run) or were made (not dry_run).
+    """
+    changes_needed = False
+
+    env = get_environment(repo, env_name)
+    if env is None:
+        print(
+            f"✗ Cannot configure protection rules for '{env_name}' - environment does not exist"
+        )
+        return True
+
+    protection_rules = env.get("protection_rules", [])
+
+    existing_reviewer_logins = []
+    existing_reviewer_ids: Dict[str, int] = {}
+    for rule in protection_rules:
+        if rule.get("type") == "required_reviewers":
+            for reviewer in rule.get("reviewers", []):
+                login = reviewer.get("reviewer", {}).get("login")
+                uid = reviewer.get("reviewer", {}).get("id")
+                if login:
+                    existing_reviewer_logins.append(login)
+                    if uid:
+                        existing_reviewer_ids[login] = uid
+
+    can_admins_bypass = env.get("can_admins_bypass", True)
+
+    missing_reviewers = [r for r in required_reviewers if r not in existing_reviewer_logins]
+    needs_protection_update = bool(missing_reviewers) or can_admins_bypass
+
+    for reviewer in required_reviewers:
+        if reviewer in existing_reviewer_logins:
+            print(f"✓ Required reviewer '{reviewer}' is configured for '{env_name}'")
+        else:
+            print(f"❌ Required reviewer '{reviewer}' is not configured for '{env_name}'")
+            changes_needed = True
+
+    if can_admins_bypass:
+        print(
+            f"❌ 'Allow administrators to bypass configured protection rules' is enabled for '{env_name}' (must be disabled)"
+        )
+        changes_needed = True
+    else:
+        print(f"✓ Administrator bypass is disabled for '{env_name}'")
+
+    if needs_protection_update and not dry_run:
+        all_logins = list(existing_reviewer_logins)
+        for login in missing_reviewers:
+            all_logins.append(login)
+        payload = {
+            "reviewers": [
+                {
+                    "type": "User",
+                    "id": existing_reviewer_ids.get(login) or get_user_id(login),
+                }
+                for login in all_logins
+            ],
+            "can_admins_bypass": False,
+            "deployment_branch_policy": None,
+        }
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as f:
+            json.dump(payload, f)
+            f.flush()
+            run_gh_command(
+                [
+                    "api",
+                    f"repos/{repo}/environments/{env_name}",
+                    "-X",
+                    "PUT",
+                    "--input",
+                    f.name,
+                ]
+            )
+        for login in missing_reviewers:
+            print(f"✓ Set required reviewer '{login}' for '{env_name}'")
+        if can_admins_bypass:
+            print(f"✓ Disabled administrator bypass for '{env_name}'")
+
+    if needs_protection_update and dry_run:
+        for login in missing_reviewers:
+            print(f"  Would add required reviewer '{login}' to '{env_name}'")
+        if can_admins_bypass:
+            print(f"  Would disable administrator bypass for '{env_name}'")
+
+    return changes_needed
+
+
 def configure_repository(repo: str, debusine_host: str, dry_run: bool, force: bool = False) -> int:
     """
     Configure repository with required settings.
@@ -209,27 +322,18 @@ def configure_repository(repo: str, debusine_host: str, dry_run: bool, force: bo
         print("✓ Default branch is 'qli-ci'")
     print()
 
-    # 1. Ensure Production and Staging environments exist
+    # 1. Ensure all managed environments exist
     print("Checking environments...")
-    env = get_environment(repo, "Production")
-    if env is None:
-        print("❌ Environment 'Production' does not exist")
-        changes_needed = True
-        if not dry_run:
-            create_environment(repo, "Production", dry_run)
-            print("✓ Created environment 'Production'")
-    else:
-        print("✓ Environment 'Production' exists")
-
-    env_staging = get_environment(repo, "Staging")
-    if env_staging is None:
-        print("❌ Environment 'Staging' does not exist")
-        changes_needed = True
-        if not dry_run:
-            create_environment(repo, "Staging", dry_run)
-            print("✓ Created environment 'Staging'")
-    else:
-        print("✓ Environment 'Staging' exists")
+    for env_name in MANAGED_ENVIRONMENTS:
+        env = get_environment(repo, env_name)
+        if env is None:
+            print(f"❌ Environment '{env_name}' does not exist")
+            changes_needed = True
+            if not dry_run:
+                create_environment(repo, env_name, dry_run)
+                print(f"✓ Created environment '{env_name}'")
+        else:
+            print(f"✓ Environment '{env_name}' exists")
 
     print()
 
@@ -273,84 +377,15 @@ def configure_repository(repo: str, debusine_host: str, dry_run: bool, force: bo
     # 4. Configure environment protection rules
     print("Checking environment protection rules...")
 
-    # First ensure environment exists (might have just been created)
-    env = get_environment(repo, "Production")
-    if env is None:
-        print(
-            "✗ Cannot configure protection rules - environment does not exist"
-        )
-        return 1
-
-    protection_rules = env.get("protection_rules", [])
-
-    existing_reviewer_logins = []
-    existing_reviewer_ids: Dict[str, int] = {}
-    for rule in protection_rules:
-        if rule.get("type") == "required_reviewers":
-            for reviewer in rule.get("reviewers", []):
-                login = reviewer.get("reviewer", {}).get("login")
-                uid = reviewer.get("reviewer", {}).get("id")
-                if login:
-                    existing_reviewer_logins.append(login)
-                    if uid:
-                        existing_reviewer_ids[login] = uid
-
-    can_admins_bypass = env.get("can_admins_bypass", True)
-
-    missing_reviewers = [r for r in REQUIRED_REVIEWERS if r not in existing_reviewer_logins]
-    needs_protection_update = bool(missing_reviewers) or can_admins_bypass
-
-    for reviewer in REQUIRED_REVIEWERS:
-        if reviewer in existing_reviewer_logins:
-            print(f"✓ Required reviewer '{reviewer}' is configured")
-        else:
-            print(f"❌ Required reviewer '{reviewer}' is not configured")
+    # ensure_required_reviewers() reports a missing environment gracefully
+    # (as a needed change) rather than aborting, so all reviewer-enforced
+    # environments are always checked/reported, even in --check mode when
+    # some of them don't exist yet.
+    for index, (env_name, reviewers) in enumerate(REVIEWER_ENFORCED_ENVIRONMENTS.items()):
+        if index > 0:
+            print()
+        if ensure_required_reviewers(repo, env_name, reviewers, dry_run):
             changes_needed = True
-
-    if can_admins_bypass:
-        print("❌ 'Allow administrators to bypass configured protection rules' is enabled (must be disabled)")
-        changes_needed = True
-    else:
-        print("✓ Administrator bypass is disabled")
-
-    if needs_protection_update and not dry_run:
-        all_logins = list(existing_reviewer_logins)
-        for login in missing_reviewers:
-            all_logins.append(login)
-        payload = {
-            "reviewers": [
-                {
-                    "type": "User",
-                    "id": existing_reviewer_ids.get(login) or get_user_id(login),
-                }
-                for login in all_logins
-            ],
-            "can_admins_bypass": False,
-            "deployment_branch_policy": None,
-        }
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as f:
-            json.dump(payload, f)
-            f.flush()
-            run_gh_command(
-                [
-                    "api",
-                    f"repos/{repo}/environments/Production",
-                    "-X",
-                    "PUT",
-                    "--input",
-                    f.name,
-                ]
-            )
-        for login in missing_reviewers:
-            print(f"✓ Set required reviewer '{login}'")
-        if can_admins_bypass:
-            print("✓ Disabled administrator bypass")
-
-    if needs_protection_update and dry_run:
-        for login in missing_reviewers:
-            print(f"  Would add required reviewer '{login}'")
-        if can_admins_bypass:
-            print("  Would disable administrator bypass")
 
     # Check Staging has no protection rules
     staging_env = get_environment(repo, "Staging")
