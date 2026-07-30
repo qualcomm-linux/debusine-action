@@ -6,7 +6,14 @@
 name: Debusine PR Check
 
 on:
-  workflow_run:
+  # workflow_run is required here: the Debusine PR Hook runs in the untrusted
+  # pull_request context (no secrets on forks), so the privileged CI work and
+  # commit-status updates must run from this separate, trusted workflow. The
+  # head SHA is read from the trusted workflow_run payload rather than from
+  # attacker-controlled PR data, and no job here is granted write access to
+  # repository contents (see the permissions blocks below), so this cannot be
+  # abused to push to the repo.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: ["Debusine PR Hook"]
     types:
       - completed
