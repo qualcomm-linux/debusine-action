@@ -8,6 +8,13 @@
 
 name: Debusine Release
 
+# GitHub does not record workflow_dispatch input values anywhere retrievable
+# after a run, so surface the release decision in the run title. This is
+# evaluated at run-creation time and needs no runner.
+run-name: >-
+  Debusine Release ${{ github.ref_name }}${{ inputs.release && ' (releasing)'
+  || ' (build only)' }} by @${{ github.actor }}
+
 on:
   workflow_dispatch:
     inputs:
