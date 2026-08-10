@@ -29,6 +29,11 @@ on:
         type: string
         required: false
         default: qli-ci
+      workflow_kind:
+        description: Which caller this is - one of PR, DAILY, RELEASE
+        type: string
+        required: false
+        default: ""
       job_index:
         # This is used to generate a unique Debusine child workspace name for
         # each expansion of the matrix
@@ -126,6 +131,7 @@ jobs:
             }
             core.setOutput('source_ref', ref);
             core.info(`Using source_ref '${ref}'`);
+
 
   source-package:
     name: Prepare source package
@@ -287,7 +293,7 @@ jobs:
 
   AXIOM_Check:
     name: AXIOM Check
-    if: ${{ vars.AXIOM_ENABLE == 'true' }}
+    if: ${{ vars.AXIOM_ENABLE == 'true' &&  (vars[format('AXIOM_ENABLE_{0}', inputs.workflow_kind)] == 'true')}}
     needs: [build]
     runs-on: ubuntu-latest
     environment: Axiom
