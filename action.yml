@@ -30,6 +30,9 @@ inputs:
   debusine_server:
     description: 'Debusine server URL (optional, defaults to dev.debian.qualcomm.com)'
     required: false
+  debusine_scope:
+    description: 'Debusine API scope (optional, defaults to qualcomm)'
+    required: false
 
 outputs:
   workflow_id:
