@@ -20,6 +20,8 @@ what SPECIFICATION.md says.
 ## Prerequisites
 
 - `gh` CLI tool must be installed and authenticated (`gh auth login`)
+- `gh` authentication for `github.com` must include the `workflow` scope:
+  `gh auth refresh -h github.com -s workflow`
 - Appropriate permissions on the target repository
 
 ## Tools
@@ -281,6 +283,8 @@ Or run the steps individually:
 
 **"gh is not authenticated"**
 - Run `gh auth login` and follow the prompts
+- If workflow updates fail due to missing OAuth scopes, run
+  `gh auth refresh -h github.com -s workflow`
 
 **"Failed to set environment secret"**
 - Ensure the Production environment exists by running `configure-repo`
