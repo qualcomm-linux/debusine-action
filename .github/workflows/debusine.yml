@@ -69,6 +69,15 @@ jobs:
         uses: actions/github-script@v9
         env:
           TARGET_BRANCH: ${{ inputs.target_branch }}
+          # GitHub does not record workflow_dispatch/workflow_call input
+          # values anywhere retrievable after a run, so capture them in the
+          # step summary. Passed via env rather than interpolated into the
+          # script body to avoid expression injection.
+          INPUT_SOURCE_REF: ${{ inputs.source_ref }}
+          INPUT_RELEASE: ${{ inputs.release }}
+          INPUT_ACTION_REF: ${{ inputs.debusine-action-ref }}
+          INPUT_PARENT_WORKSPACE: ${{ inputs.debusine-parent-workspace }}
+          INPUT_JOB_INDEX: ${{ inputs.job_index }}
         with:
           script: |
             const suffixToSuite = {
@@ -83,6 +92,30 @@ jobs:
             ];
 
             const targetBranch = process.env.TARGET_BRANCH;
+            const {
+              INPUT_SOURCE_REF, INPUT_RELEASE, INPUT_ACTION_REF,
+              INPUT_PARENT_WORKSPACE, INPUT_JOB_INDEX,
+            } = process.env;
+
+            // Record the inputs this run was invoked with. Written before
+            // validation so the values are still captured when resolution
+            // fails below. addTable emits HTML, where markdown is not parsed,
+            // so use <code>/<em> rather than backticks/underscores.
+            const shown = v => (v === '' || v === undefined)
+              ? '<em>(default)</em>' : `<code>${v}</code>`;
+            core.summary
+              .addHeading('Debusine CI run inputs', 2)
+              .addTable([
+                [{data: 'Input', header: true}, {data: 'Value', header: true}],
+                ['target_branch', shown(targetBranch)],
+                ['source_ref', shown(INPUT_SOURCE_REF)],
+                ['release', shown(INPUT_RELEASE)],
+                ['debusine-action-ref', shown(INPUT_ACTION_REF)],
+                ['debusine-parent-workspace', shown(INPUT_PARENT_WORKSPACE)],
+                ['job_index', shown(INPUT_JOB_INDEX)],
+              ]);
+            await core.summary.write();
+
             const prefixEntry = prefixMap.find(e => targetBranch.startsWith(e.prefix));
             if (!prefixEntry) {
               core.setFailed(`Unknown target branch prefix: ${targetBranch}. Branch must start with one of: ${prefixMap.map(e => e.prefix).join(', ')}`);
@@ -103,6 +136,24 @@ jobs:
             core.setOutput('environment', prefixEntry.environment);
             core.setOutput('extra_build_dep_workspaces', prefixEntry.extra_build_dep_workspaces.join(' '));
             core.info(`Mapped branch '${targetBranch}' to suite '${suite}', workspace '${workspace}', identifier '${identifier}', environment '${prefixEntry.environment}'`);
+
+            // Values derived from the inputs above; these do not exist yet
+            // at run-name evaluation time, so this is the only place to
+            // record them.
+            const code = v => `<code>${v}</code>`;
+            core.summary
+              .addHeading('Resolved values', 2)
+              .addTable([
+                [{data: 'Value', header: true},
+                 {data: 'Resolved', header: true}],
+                ['suite', code(suite)],
+                ['debusine_target_workspace', code(workspace)],
+                ['package_version_identifier', code(identifier)],
+                ['environment', code(prefixEntry.environment)],
+                ['extra_build_dep_workspaces',
+                 code(prefixEntry.extra_build_dep_workspaces.join(' '))],
+              ]);
+            await core.summary.write();
       - id: determine_checkout_ref
         name: Determine the ref of the packaging to build
         uses: actions/github-script@v9
