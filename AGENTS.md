@@ -10,7 +10,8 @@ This repo is responsible for:
 1. The reusable Debusine CI workflow in `.github/workflows/debusine.yml`
 2. The helper scripts under `lib/`
 3. The Debusine builder images published from `Dockerfiles/debusine-builder/`
-4. The reference `packaging-workflows/` files that downstream `pkg-*` repos copy
+4. The tooling that syncs Debusine workflow stubs from `qli-ci` into
+   downstream `pkg-*` repositories
 
 `qcom-build-utils` orchestrates package-repo behavior around this repo, but
 `debusine-action` is the source of truth for Debusine helper behavior and image
@@ -23,7 +24,7 @@ For current Qualcomm Linux package CI/release behavior, treat these as active:
 - `.github/workflows/debusine.yml`
 - `lib/*` helper scripts called by that reusable workflow
 - `Dockerfiles/debusine-builder/*`
-- `packaging-workflows/*` and `packaging-workflows/README*.md`
+- `tools/update-workflow-files` and related tool docs/specification
 
 Top-level composite action files (`action.yml`, `setup/`, `import-artifact/`,
 `run-workflow/`) still exist, but they are not the primary source of truth for
@@ -94,8 +95,9 @@ Preserve this pass-through unless a documented and approved design change is imp
 
 ## Packaging Workflow Layout
 
-The `packaging-workflows/` directory contains reference workflow files that are
-copied into downstream package repositories.
+Debusine workflow stubs are sourced from:
+
+- `qualcomm-linux/qli-ci/.github/pkg-workflows/debusine/`
 
 Current intended placement:
 
@@ -108,8 +110,8 @@ Current intended placement:
 
 Also follow:
 
-- `packaging-workflows/README.md`
-- `packaging-workflows/README.debusine.md`
+- `qualcomm-linux/qli-ci/.github/pkg-workflows/debusine/README.md`
+- `qualcomm-linux/qli-ci/.github/pkg-workflows/debusine/README.debusine.md`
 
 `README.debusine.md` should be copied into `.github/workflows/` in downstream
 branches alongside the workflow files.
@@ -118,7 +120,7 @@ branches alongside the workflow files.
 
 ### Release workflow UI
 
-Keep `packaging-workflows/debusine-release.yml` branch-local.
+Keep `qli-ci/.github/pkg-workflows/debusine/debusine-release.yml` branch-local.
 
 That means:
 
@@ -142,11 +144,12 @@ This fixed earlier missing-orig-tarball and path-restoration issues.
 
 ## Downstream Sync Model
 
-- Changes to `packaging-workflows/*` must also be copied into managed `pkg-*`
+- Source workflow stubs live in
+  `qualcomm-linux/qli-ci/.github/pkg-workflows/debusine/`.
+- `tools/update-workflow-files` syncs those stubs into managed `pkg-*`
   repositories.
-- Changes to `packaging-workflows/README*.md` should be copied too.
-- That sync is currently manual.
-- The source files in this repo should keep their stable merge target refs.
+- Changes to workflow contracts should update qli-ci stubs and downstream copies
+  together.
 
 Important convention:
 
@@ -167,7 +170,8 @@ to merge to `main`.
 - ad hoc source-package file moves that bypass the current staged artifact flow
 - branch/suite drift between:
   - `.github/workflows/debusine.yml` (`resolve` suite map)
-  - `packaging-workflows/debusine-daily.yml` (`check-branches` candidates list)
+  - `qli-ci/.github/pkg-workflows/debusine/debusine-daily.yml`
+    (`check-branches` candidates list)
 
 ## When Editing This Repo
 
@@ -175,14 +179,15 @@ to merge to `main`.
    `.github/workflows/debusine.yml`.
 
 2. **Changing reusable workflow contracts**: Update all of:
-   - `packaging-workflows/*`
-   - `packaging-workflows/README.md`
-   - `packaging-workflows/README.debusine.md`
+   - `qli-ci/.github/pkg-workflows/debusine/*`
+   - `qli-ci/.github/pkg-workflows/debusine/README.md`
+   - `qli-ci/.github/pkg-workflows/debusine/README.debusine.md`
    - Downstream validation copies in managed `pkg-*` repos when needed
 
 3. **Adding/removing supported Debian packaging branches or suites**: Update both:
    - `.github/workflows/debusine.yml` branch-to-suite map
-   - `packaging-workflows/debusine-daily.yml` branch candidates
+   - `qli-ci/.github/pkg-workflows/debusine/debusine-daily.yml` branch
+     candidates
 
 4. **Adding/removing supported builder suites**: Also update
    `.github/workflows/debusine-container-build-and-upload.yml` image matrix.
@@ -211,12 +216,9 @@ Known pattern:
 
 - `.github/workflows/debusine.yml`
 - `.github/workflows/debusine-container-build-and-upload.yml`
-- `packaging-workflows/README.md`
-- `packaging-workflows/README.debusine.md`
-- `packaging-workflows/debusine-daily.yml`
-- `packaging-workflows/debusine-pr-check.yml`
-- `packaging-workflows/debusine-pr-hook.yml`
-- `packaging-workflows/debusine-release.yml`
+- `tools/update-workflow-files`
+- `tools/README.md`
+- `tools/SPECIFICATION.md`
 - `Dockerfiles/debusine-builder/Dockerfile`
 - `Dockerfiles/debusine-builder/base-packages.txt`
 - `lib/build`
