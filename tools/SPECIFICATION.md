@@ -117,8 +117,8 @@ The following secret must be set in the `Staging` environment:
 ## Workflow Files
 
 Workflow files must be present and be duplicates of the corresponding
-files that are in `packaging-workflows/` in the main branch of the
-qualcomm-linux/debusine-action repository as follows:
+files that are in `.github/pkg-workflows/debusine/` in the main branch
+of the qualcomm-linux/qli-ci repository as follows:
 
 ### Default Branch
 
