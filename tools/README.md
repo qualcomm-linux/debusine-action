@@ -136,10 +136,11 @@ The tool will interactively prompt for each secret value.
 ### update-workflow-files
 
 Ensures that workflow files in each relevant branch of a `pkg-*`
-repository match the current state of `packaging-workflows/` in a branch
-of `qualcomm-linux/debusine-action` (default: `main`). Clones both
-repositories into a temporary directory, compares files branch by
-branch, and pushes changes directly to each branch that needs updating.
+repository match the current state of
+`qli-ci/.github/pkg-workflows/debusine/` in a branch of
+`qualcomm-linux/qli-ci` (default: `main`). Clones both repositories
+into a temporary directory, compares files branch by branch, and pushes
+changes directly to each branch that needs updating.
 
 **Usage:**
 ```bash
@@ -166,7 +167,7 @@ branch, and pushes changes directly to each branch that needs updating.
 - `--no-clean`: Leave the temporary directory on exit and print its path
   (useful with `--check` to inspect the commit that would be pushed)
 - `--debug-source-branch <branch>`: Branch of
-  `qualcomm-linux/debusine-action` to use as the source (default:
+  `qualcomm-linux/qli-ci` to use as the source (default:
   `main`). Rewrites `@main` references in workflow files to `@<branch>`
   before deploying. Cannot be used when processing production-managed
   branches of a `pkg-*` repository.
@@ -217,9 +218,10 @@ sourced workflow files are modified before being deployed or compared:
 - The corresponding `with.debusine-action-ref: main` value is rewritten
   to `<branch>`.
 
-This allows workflow files from a feature branch of debusine-action to
-be tested against the same feature branch at runtime. This modification
-is not applied in normal operation.
+This allows workflow files sourced from a feature branch of qli-ci to be
+tested while also pointing to the same branch name for
+`qualcomm-linux/debusine-action` runtime calls. This modification is not
+applied in normal operation.
 
 Using `--debug-source-branch` on a `pkg-*` repository is an error if any
 branch being processed is in the default managed set — that is, if it

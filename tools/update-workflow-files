@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Ensure workflow files in a pkg-* repository match the current state of
-packaging-workflows/ in a configurable branch (default: main) of
-qualcomm-linux/debusine-action.
+.github/pkg-workflows/debusine/ in a configurable branch (default: main) of
+qualcomm-linux/qli-ci.
 """
 
 # Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
@@ -25,8 +25,9 @@ import pygit2
 import github
 from github.PullRequest import PullRequest
 
-DEBUSINE_ACTION_REPO = "qualcomm-linux/debusine-action"
-DEBUSINE_ACTION_DEFAULT_BRANCH = "main"
+WORKFLOW_SOURCE_REPO = "qualcomm-linux/qli-ci"
+WORKFLOW_SOURCE_DEFAULT_BRANCH = "main"
+WORKFLOW_SOURCE_PATH = ".github/pkg-workflows/debusine"
 
 PACKAGING_BRANCH_ALLOWLIST = [
     "qcom/debian/trixie",
@@ -53,8 +54,8 @@ PACKAGING_BRANCH_FILES = [
 
 PR_TITLE = "Update Debusine CI workflows"
 PR_BODY = (
-    "Update workflow files to match current `packaging-workflows/` "
-    "in qualcomm-linux/debusine-action."
+    "Update workflow files to match current "
+    "`.github/pkg-workflows/debusine/` in qualcomm-linux/qli-ci."
 )
 
 
@@ -256,7 +257,7 @@ def process_branch(
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Ensure workflow files in a pkg-* repository match the current state of "
-                    "a configurable branch (default: main) of qualcomm-linux/debusine-action.",
+                    "a configurable branch (default: main) of qualcomm-linux/qli-ci.",
     )
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument(
@@ -283,10 +284,10 @@ def main() -> None:
     )
     parser.add_argument(
         "--debug-source-branch",
-        default=DEBUSINE_ACTION_DEFAULT_BRANCH,
+        default=WORKFLOW_SOURCE_DEFAULT_BRANCH,
         metavar="BRANCH",
-        help="branch of qualcomm-linux/debusine-action to use as the source "
-             f"(default: {DEBUSINE_ACTION_DEFAULT_BRANCH!r})",
+        help="branch of qualcomm-linux/qli-ci to use as the source "
+             f"(default: {WORKFLOW_SOURCE_DEFAULT_BRANCH!r})",
     )
     parser.add_argument(
         "repo_name",
@@ -330,13 +331,13 @@ def main() -> None:
         print("Cloning repositories...")
         try:
             pygit2.clone_repository(
-                f"https://github.com/{DEBUSINE_ACTION_REPO}.git",
-                str(tmppath / "debusine-action"),
+                f"https://github.com/{WORKFLOW_SOURCE_REPO}.git",
+                str(tmppath / "qli-ci"),
                 checkout_branch=source_branch,
                 callbacks=callbacks,
             )
         except pygit2.GitError as e:
-            raise CLIError(f"failed to clone {DEBUSINE_ACTION_REPO}: {e}")
+            raise CLIError(f"failed to clone {WORKFLOW_SOURCE_REPO}: {e}")
 
         try:
             pkg_repo = pygit2.clone_repository(
@@ -347,13 +348,19 @@ def main() -> None:
         except pygit2.GitError as e:
             raise CLIError(f"failed to clone {full_repo}: {e}")
 
-        source_dir = tmppath / "debusine-action" / "packaging-workflows"
+        source_dir = tmppath / "qli-ci" / WORKFLOW_SOURCE_PATH
         pkg_workdir = tmppath / repo_name
+        if not source_dir.is_dir():
+            raise CLIError(
+                "workflow source directory "
+                f"{WORKFLOW_SOURCE_PATH!r} not found in "
+                f"{WORKFLOW_SOURCE_REPO}@{source_branch}"
+            )
 
-        if source_branch != DEBUSINE_ACTION_DEFAULT_BRANCH:
-	    # Importing the debug case inline here helps with validation. If
-	    # verifying correctness of the production flow, this allows one to
-	    # exclude this module from consideration.
+        if source_branch != WORKFLOW_SOURCE_DEFAULT_BRANCH:
+            # Importing the debug case inline here helps with validation. If
+            # verifying correctness of the production flow, this allows one to
+            # exclude this module from consideration.
             import debug_branch_mod
             debug_branch_mod.modify_workflow_files(source_dir, source_branch)
 
@@ -375,7 +382,7 @@ def main() -> None:
             )
             all_branches = ["qli-ci"] + debian_branches
 
-        if source_branch != DEBUSINE_ACTION_DEFAULT_BRANCH and repo_name.startswith("pkg-"):
+        if source_branch != WORKFLOW_SOURCE_DEFAULT_BRANCH and repo_name.startswith("pkg-"):
             managed = {"qli-ci"} | set(PACKAGING_BRANCH_ALLOWLIST)
             default_set = {
                 ref.removeprefix("refs/remotes/origin/")
