@@ -29,6 +29,11 @@ on:
         type: string
         required: false
         default: qli-ci
+      workflow_kind:
+        description: Which caller this is - one of PR, DAILY, RELEASE
+        type: string
+        required: false
+        default: ""        
       job_index:
         # This is used to generate a unique Debusine child workspace name for
         # each expansion of the matrix
@@ -260,10 +265,20 @@ jobs:
         run: |
           debusine-action/lib/generate-step-summary
 
+  AXIOM_Check:
+    name: AXIOM Check
+    if: ${{ vars.AXIOM_ENABLE == 'true' &&  (vars[format('AXIOM_ENABLE_{0}', inputs.workflow_kind)] == 'true')}}
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment: Axiom
+    steps:
+      - name: AXIOM check passed
+        run: echo "AXIOM check passed"
+
   release:
     name: Release
-    if: ${{ inputs.release }}
-    needs: [resolve, source-package, build]
+    if: ${{ always() && inputs.release && needs.build.result == 'success' && needs.AXIOM_Check.result != 'failure' && needs.AXIOM_Check.result != 'cancelled' }}
+    needs: [resolve, source-package, build, AXIOM_Check]
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/qualcomm-linux/debusine-pkg-builder:trixie

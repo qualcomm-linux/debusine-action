@@ -40,6 +40,10 @@ REQUIRED_REVIEWERS = ["basak-qcom", "gagath", "lool", "obbardc", "slyon"]
 # alphabetically)
 REQUIRED_REVIEWERS_UBUNTU_PRODUCTION = ["abickett", "bjordiscollaku", "keerthi-go"]
 
+# Required reviewers for the Axiom environment, which gates the AXIOM check
+# job (keep sorted alphabetically)
+REQUIRED_REVIEWERS_AXIOM = ["qcom-service-bot"]
+
 # Environments that require a required-reviewers protection rule, mapped to
 # the reviewers each one must have. This is the single source of truth for
 # which environments get reviewer enforcement; MANAGED_ENVIRONMENTS below
@@ -48,6 +52,7 @@ REQUIRED_REVIEWERS_UBUNTU_PRODUCTION = ["abickett", "bjordiscollaku", "keerthi-g
 REVIEWER_ENFORCED_ENVIRONMENTS = {
     "Production": REQUIRED_REVIEWERS,
     "Ubuntu Production": REQUIRED_REVIEWERS_UBUNTU_PRODUCTION,
+    "Axiom": REQUIRED_REVIEWERS_AXIOM,
 }
 
 # Environments that must simply exist (existence is checked/created for all
@@ -351,6 +356,10 @@ def configure_repository(repo: str, debusine_host: str, dry_run: bool, force: bo
     required_vars = {
         "DEBUSINE_HOST": debusine_host,
         "DEBUSINE_SCOPE": "qualcomm",
+        "AXIOM_ENABLE": "false",
+        "AXIOM_ENABLE_PR": "true",
+        "AXIOM_ENABLE_RELEASE": "true",
+        "AXIOM_ENABLE_DAILY": "true",
     }
 
     for var_name, expected_value in required_vars.items():

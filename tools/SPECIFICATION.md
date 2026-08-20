@@ -22,6 +22,18 @@ The following repository-level Actions variables must be set:
 | `DEBUSINE_HOST`  | `debusine.qualcomm.com` (production) or `stage.debusine.qualcomm.com` (stage)  |
 | `DEBUSINE_SCOPE` | `qualcomm`                                                                     |
 
+The following repository-level Actions variables gate the AXIOM check job.
+`AXIOM_ENABLE` is the master switch; the per-kind variables gate the
+individual workflow kinds. The AXIOM check only runs when `AXIOM_ENABLE`
+and the variable for the running workflow kind are both `true`.
+
+| Variable               | Value   |
+|------------------------|---------|
+| `AXIOM_ENABLE`         | `false` |
+| `AXIOM_ENABLE_PR`      | `true`  |
+| `AXIOM_ENABLE_RELEASE` | `true`  |
+| `AXIOM_ENABLE_DAILY`   | `true`  |
+
 The following repository-level Actions variable must **not** be set:
 
 - `DEBUSINE_PARENT_WORKSPACE`
@@ -113,6 +125,27 @@ The following secret must be set in the `Staging` environment:
 | Secret                   | Purpose                           |
 |--------------------------|-----------------------------------|
 | `DEBUSINE_RELEASE_TOKEN` | Debusine release operations token |
+
+### GitHub Environment: Axiom
+
+A GitHub Actions environment named `Axiom` must exist with the following
+configuration. This environment gates the AXIOM check job.
+
+#### Required Reviewers
+
+The following users must all be configured as required reviewers
+(keep this list sorted alphabetically):
+
+- `qcom-service-bot`
+
+#### Administrator Bypass
+
+"Allow administrators to bypass configured protection rules" must be
+disabled.
+
+#### Environment Secret
+
+No environment secret is required in `Axiom` at this time.
 
 ## Workflow Files
 
