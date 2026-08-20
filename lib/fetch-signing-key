@@ -43,12 +43,41 @@ MAX_WAIT=300
 
 url="https://deb.${DEBUSINE_HOST}/${DEBUSINE_SCOPE}/${DEBUSINE_WORKSPACE}/signing-keys.asc"
 
+tmp_body="$(mktemp)"
+tmp_err="$(mktemp)"
+
+cleanup_tmp() {
+    rm -f "$tmp_body" "$tmp_err"
+}
+
+trap cleanup_tmp EXIT INT TERM HUP
+
 waited=0
 while :; do
-    if key=$(curl -fsSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" "$url") \
-       && printf '%s' "$key" | debusine-action/lib/signing-key-is-valid; then
-        printf '%s' "$key"
-        exit 0
+    http_code="$(curl -sSu "${DEBUSINE_USER}:${DEBUSINE_TOKEN}" \
+        -o "$tmp_body" \
+        -w '%{http_code}' \
+        "$url" 2>"$tmp_err" || true)"
+
+    case "$http_code" in
+        401|403)
+            echo "fetch-signing-key: auth failed (HTTP ${http_code}) for ${DEBUSINE_WORKSPACE}; check DEBUSINE_USER/DEBUSINE_TOKEN" >&2
+            if [ -s "$tmp_err" ]; then
+                cat "$tmp_err" >&2
+            fi
+            exit 1
+            ;;
+        200)
+            key="$(cat "$tmp_body")"
+            if printf '%s' "$key" | debusine-action/lib/signing-key-is-valid; then
+                printf '%s' "$key"
+                exit 0
+            fi
+            ;;
+    esac
+
+    if [ -s "$tmp_err" ]; then
+        cat "$tmp_err" >&2
     fi
     if [ "$waited" -ge "$MAX_WAIT" ]; then
         echo "fetch-signing-key: gave up waiting for a valid signing key for" \
@@ -56,7 +85,8 @@ while :; do
         exit 1
     fi
     echo "fetch-signing-key: signing-keys.asc for ${DEBUSINE_WORKSPACE} not" \
-         "ready; retrying in ${RETRY_INTERVAL}s (waited ${waited}s)" >&2
+         "ready (HTTP ${http_code}); retrying in ${RETRY_INTERVAL}s" \
+         "(waited ${waited}s)" >&2
     sleep "$RETRY_INTERVAL"
     waited=$((waited + RETRY_INTERVAL))
 done
