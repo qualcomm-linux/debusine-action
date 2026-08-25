@@ -5,6 +5,15 @@
 
 name: Debusine PR Check
 
+# workflow_run runs are otherwise titled only "Debusine PR Check", giving no
+# indication of which PR they belong to. Only the github context is available
+# here, not inputs. A block scalar is required: in a plain scalar the " #"
+# would start a YAML comment and truncate the title.
+run-name: >-
+  Debusine PR Check for PR
+  #${{ github.event.workflow_run.pull_requests[0].number }}
+  (${{ github.event.workflow_run.head_branch }})
+
 on:
   workflow_run:
     workflows: ["Debusine PR Hook"]
