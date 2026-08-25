@@ -1,0 +1,108 @@
+# Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# Source this file to set Debusine credentials in the current shell:
+#
+#   source ./setenv
+#   py.test-3 [pytest-args...]
+
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    echo "Error: this script must be sourced, not executed." >&2
+    echo "  Run: source ${0}" >&2
+    exit 1
+fi
+
+_DEBUSINE_DEFAULT_HOST="stage.debusine.qualcomm.com"
+_DEBUSINE_PRODUCTION_HOST="debusine.qualcomm.com"
+_DEBUSINE_HOST_SUFFIX=".debusine.qualcomm.com"
+_DEBUSINE_DEFAULT_USER="DebusineGitHubCI@qualcomm.com"
+
+# Sets the variable named by $1 to the chosen host.
+_debusine_select_host() {
+    local _out_var="$1"
+    local current="${DEBUSINE_HOST:-}"
+    echo "Select Debusine host:"
+    if [[ -n "$current" ]]; then
+        echo "  1) ${_DEBUSINE_DEFAULT_HOST} (staging)"
+        echo "  2) ${_DEBUSINE_PRODUCTION_HOST} (production)"
+        echo "  3) Other *${_DEBUSINE_HOST_SUFFIX} host"
+        echo "  [already set: ${current}]"
+        echo "  Press Enter to keep existing value."
+    else
+        echo "  1) ${_DEBUSINE_DEFAULT_HOST} [default]"
+        echo "  2) ${_DEBUSINE_PRODUCTION_HOST} (production)"
+        echo "  3) Other *${_DEBUSINE_HOST_SUFFIX} host"
+    fi
+    local choice host result
+    while true; do
+        if [[ -n "$current" ]]; then
+            read -r -p "Choice [keep]: " choice
+        else
+            read -r -p "Choice [1]: " choice
+        fi
+        case "$choice" in
+            "")
+                result="${current:-$_DEBUSINE_DEFAULT_HOST}"
+                printf -v "$_out_var" '%s' "$result"; return
+                ;;
+            1) printf -v "$_out_var" '%s' "$_DEBUSINE_DEFAULT_HOST"; return ;;
+            2) printf -v "$_out_var" '%s' "$_DEBUSINE_PRODUCTION_HOST"; return ;;
+            3)
+                while true; do
+                    read -r -p "Hostname (must end with ${_DEBUSINE_HOST_SUFFIX}): " host
+                    if [[ "$host" == *"${_DEBUSINE_HOST_SUFFIX}" && "${#host}" -gt "${#_DEBUSINE_HOST_SUFFIX}" ]]; then
+                        printf -v "$_out_var" '%s' "$host"; return
+                    fi
+                    echo "Error: hostname must end with ${_DEBUSINE_HOST_SUFFIX}. Please try again."
+                done
+                ;;
+            *) echo "Please enter 1, 2, or 3." ;;
+        esac
+    done
+}
+
+# Sets the variable named by $1 to the entered secret.
+_debusine_prompt_secret() {
+    local _out_var="$1" label="$2" env_var="$3"
+    local existing="${!env_var:-}"
+    local value
+    if [[ -n "$existing" ]]; then
+        read -r -s -p "${label} [already set, press Enter to keep]: " value
+        echo
+        printf -v "$_out_var" '%s' "${value:-$existing}"
+    else
+        while true; do
+            read -r -s -p "${label}: " value
+            echo
+            if [[ -n "$value" ]]; then
+                printf -v "$_out_var" '%s' "$value"; return
+            fi
+            echo "Error: value cannot be empty. Please try again."
+        done
+    fi
+}
+
+echo
+_debusine_select_host DEBUSINE_HOST
+echo
+
+read -r -p "DEBUSINE_USER [${DEBUSINE_USER:-${_DEBUSINE_DEFAULT_USER}}]: " _debusine_user_input
+DEBUSINE_USER="${_debusine_user_input:-${DEBUSINE_USER:-${_DEBUSINE_DEFAULT_USER}}}"
+unset _debusine_user_input
+
+_debusine_prompt_secret DEBUSINE_TOKEN "DEBUSINE_TOKEN" "DEBUSINE_TOKEN"
+_debusine_prompt_secret DEBUSINE_PRODUCTION_RELEASE_TOKEN "DEBUSINE_PRODUCTION_RELEASE_TOKEN (for qli)" "DEBUSINE_PRODUCTION_RELEASE_TOKEN"
+_debusine_prompt_secret DEBUSINE_STAGING_RELEASE_TOKEN "DEBUSINE_STAGING_RELEASE_TOKEN (for qli-staging)" "DEBUSINE_STAGING_RELEASE_TOKEN"
+echo
+
+export DEBUSINE_HOST
+export DEBUSINE_SCOPE="qualcomm"
+export DEBUSINE_USER
+export DEBUSINE_TOKEN
+export DEBUSINE_PRODUCTION_RELEASE_TOKEN
+export DEBUSINE_STAGING_RELEASE_TOKEN
+
+unset _DEBUSINE_DEFAULT_HOST _DEBUSINE_PRODUCTION_HOST _DEBUSINE_HOST_SUFFIX _DEBUSINE_DEFAULT_USER
+unset -f _debusine_select_host _debusine_prompt_secret
+
+echo "Environment set. Now run: py.test-3 $(dirname "${BASH_SOURCE[0]}")"
