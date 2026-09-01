@@ -137,7 +137,7 @@ The tool will interactively prompt for each secret value.
 
 Ensures that workflow files in each relevant branch of a `pkg-*`
 repository match the current state of
-`qli-ci/.github/pkg-workflows/debusine/` in a branch of
+`qli-ci/pkg-workflows/debusine/` in a branch of
 `qualcomm-linux/qli-ci` (default: `main`). Clones both repositories
 into a temporary directory, compares files branch by branch, and pushes
 changes directly to each branch that needs updating.

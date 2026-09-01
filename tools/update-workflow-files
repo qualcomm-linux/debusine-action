@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Ensure workflow files in a pkg-* repository match the current state of
-.github/pkg-workflows/debusine/ in a configurable branch (default: main) of
+pkg-workflows/debusine/ in a configurable branch (default: main) of
 qualcomm-linux/qli-ci.
 """
 
@@ -27,7 +27,7 @@ from github.PullRequest import PullRequest
 
 WORKFLOW_SOURCE_REPO = "qualcomm-linux/qli-ci"
 WORKFLOW_SOURCE_DEFAULT_BRANCH = "main"
-WORKFLOW_SOURCE_PATH = ".github/pkg-workflows/debusine"
+WORKFLOW_SOURCE_PATH = "pkg-workflows/debusine"
 
 PACKAGING_BRANCH_ALLOWLIST = [
     "qcom/debian/trixie",
@@ -55,7 +55,7 @@ PACKAGING_BRANCH_FILES = [
 PR_TITLE = "Update Debusine CI workflows"
 PR_BODY = (
     "Update workflow files to match current "
-    "`.github/pkg-workflows/debusine/` in qualcomm-linux/qli-ci."
+    "`pkg-workflows/debusine/` in qualcomm-linux/qli-ci."
 )
 
 

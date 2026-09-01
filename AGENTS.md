@@ -97,7 +97,7 @@ Preserve this pass-through unless a documented and approved design change is imp
 
 Debusine workflow stubs are sourced from:
 
-- `qualcomm-linux/qli-ci/.github/pkg-workflows/debusine/`
+- `qualcomm-linux/qli-ci/pkg-workflows/debusine/`
 
 Current intended placement:
 
@@ -110,8 +110,8 @@ Current intended placement:
 
 Also follow:
 
-- `qualcomm-linux/qli-ci/.github/pkg-workflows/debusine/README.md`
-- `qualcomm-linux/qli-ci/.github/pkg-workflows/debusine/README.debusine.md`
+- `qualcomm-linux/qli-ci/pkg-workflows/debusine/README.md`
+- `qualcomm-linux/qli-ci/pkg-workflows/debusine/README.debusine.md`
 
 `README.debusine.md` should be copied into `.github/workflows/` in downstream
 branches alongside the workflow files.
@@ -120,7 +120,7 @@ branches alongside the workflow files.
 
 ### Release workflow UI
 
-Keep `qli-ci/.github/pkg-workflows/debusine/debusine-release.yml` branch-local.
+Keep `qli-ci/pkg-workflows/debusine/debusine-release.yml` branch-local.
 
 That means:
 
@@ -145,7 +145,7 @@ This fixed earlier missing-orig-tarball and path-restoration issues.
 ## Downstream Sync Model
 
 - Source workflow stubs live in
-  `qualcomm-linux/qli-ci/.github/pkg-workflows/debusine/`.
+  `qualcomm-linux/qli-ci/pkg-workflows/debusine/`.
 - `tools/update-workflow-files` syncs those stubs into managed `pkg-*`
   repositories.
 - Changes to workflow contracts should update qli-ci stubs and downstream copies
@@ -170,7 +170,7 @@ to merge to `main`.
 - ad hoc source-package file moves that bypass the current staged artifact flow
 - branch/suite drift between:
   - `.github/workflows/debusine.yml` (`resolve` suite map)
-  - `qli-ci/.github/pkg-workflows/debusine/debusine-daily.yml`
+  - `qli-ci/pkg-workflows/debusine/debusine-daily.yml`
     (`check-branches` candidates list)
 
 ## When Editing This Repo
@@ -179,14 +179,14 @@ to merge to `main`.
    `.github/workflows/debusine.yml`.
 
 2. **Changing reusable workflow contracts**: Update all of:
-   - `qli-ci/.github/pkg-workflows/debusine/*`
-   - `qli-ci/.github/pkg-workflows/debusine/README.md`
-   - `qli-ci/.github/pkg-workflows/debusine/README.debusine.md`
+   - `qli-ci/pkg-workflows/debusine/*`
+   - `qli-ci/pkg-workflows/debusine/README.md`
+   - `qli-ci/pkg-workflows/debusine/README.debusine.md`
    - Downstream validation copies in managed `pkg-*` repos when needed
 
 3. **Adding/removing supported Debian packaging branches or suites**: Update both:
    - `.github/workflows/debusine.yml` branch-to-suite map
-   - `qli-ci/.github/pkg-workflows/debusine/debusine-daily.yml` branch
+   - `qli-ci/pkg-workflows/debusine/debusine-daily.yml` branch
      candidates
 
 4. **Adding/removing supported builder suites**: Also update
