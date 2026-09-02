@@ -1,0 +1,56 @@
+{
+  "default_branch": "qli-ci",
+  "prerequisites": {
+    "visibility": "public",
+    "custom_properties": {
+      "is-pkg-repo": "true"
+    }
+  },
+  "host_profiles": {
+    "production": {
+      "DEBUSINE_HOST": "debusine.qualcomm.com"
+    },
+    "stage": {
+      "DEBUSINE_HOST": "stage.debusine.qualcomm.com"
+    }
+  },
+  "variables": {
+    "required": {
+      "DEBUSINE_SCOPE": "qualcomm"
+    },
+    "prohibited": [
+      "DEBUSINE_PARENT_WORKSPACE"
+    ]
+  },
+  "environments": {
+    "Production": {
+      "protection": {
+        "type": "required_reviewers",
+        "reviewers": [
+          "basak-qcom",
+          "gagath",
+          "lool",
+          "obbardc",
+          "slyon"
+        ],
+        "allow_admin_bypass": false
+      }
+    },
+    "Ubuntu Production": {
+      "protection": {
+        "type": "required_reviewers",
+        "reviewers": [
+          "abickett",
+          "bjordiscollaku",
+          "keerthi-go"
+        ],
+        "allow_admin_bypass": false
+      }
+    },
+    "Staging": {
+      "protection": {
+        "type": "none"
+      }
+    }
+  }
+}

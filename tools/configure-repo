@@ -27,39 +27,17 @@ import json
 import subprocess
 import sys
 import tempfile
-from typing import Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
-# Default environment - change this constant to swap the default
+# Repository configuration data (required variables, secrets, environments,
+# reviewers, etc.) lives in repo-configs.json alongside this script, so it
+# can be read and audited without going through this code.
+CONFIG_PATH = Path(__file__).resolve().parent / "repo-configs.json"
+CONFIG: Dict[str, Any] = json.loads(CONFIG_PATH.read_text())
+
+# Default host profile - change this constant to swap the default
 DEFAULT_ENVIRONMENT = "production"
-
-# Required reviewers for the Production environment (keep sorted
-# alphabetically)
-REQUIRED_REVIEWERS = ["basak-qcom", "gagath", "lool", "obbardc", "slyon"]
-
-# Required reviewers for the Ubuntu Production environment (keep sorted
-# alphabetically)
-REQUIRED_REVIEWERS_UBUNTU_PRODUCTION = ["abickett", "bjordiscollaku", "keerthi-go"]
-
-# Environments that require a required-reviewers protection rule, mapped to
-# the reviewers each one must have. This is the single source of truth for
-# which environments get reviewer enforcement; MANAGED_ENVIRONMENTS below
-# (existence-only) is derived from it plus Staging, which has no protection
-# rules.
-REVIEWER_ENFORCED_ENVIRONMENTS = {
-    "Production": REQUIRED_REVIEWERS,
-    "Ubuntu Production": REQUIRED_REVIEWERS_UBUNTU_PRODUCTION,
-}
-
-# Environments that must simply exist (existence is checked/created for all
-# of these; required-reviewer protection rules are enforced separately below
-# for the subset that need them)
-MANAGED_ENVIRONMENTS = list(REVIEWER_ENFORCED_ENVIRONMENTS) + ["Staging"]
-
-# Environment to host mapping
-ENVIRONMENT_HOSTS = {
-    "production": "debusine.qualcomm.com",
-    "stage": "stage.debusine.qualcomm.com",
-}
 
 
 def run_gh_command(args: List[str]) -> str:
@@ -182,12 +160,16 @@ def get_user_id(username: str) -> int:
 
 
 def ensure_required_reviewers(
-    repo: str, env_name: str, required_reviewers: List[str], dry_run: bool
+    repo: str,
+    env_name: str,
+    required_reviewers: List[str],
+    allow_admin_bypass: bool,
+    dry_run: bool,
 ) -> bool:
     """
     Ensure the named environment has all required_reviewers configured and
-    administrator bypass disabled. Prints status/progress lines matching the
-    existing tool output style.
+    administrator bypass set to allow_admin_bypass. Prints status/progress
+    lines matching the existing tool output style.
 
     Returns True if changes are needed (dry_run) or were made (not dry_run).
     """
@@ -217,7 +199,7 @@ def ensure_required_reviewers(
     can_admins_bypass = env.get("can_admins_bypass", True)
 
     missing_reviewers = [r for r in required_reviewers if r not in existing_reviewer_logins]
-    needs_protection_update = bool(missing_reviewers) or can_admins_bypass
+    needs_protection_update = bool(missing_reviewers) or can_admins_bypass != allow_admin_bypass
 
     for reviewer in required_reviewers:
         if reviewer in existing_reviewer_logins:
@@ -226,13 +208,16 @@ def ensure_required_reviewers(
             print(f"❌ Required reviewer '{reviewer}' is not configured for '{env_name}'")
             changes_needed = True
 
-    if can_admins_bypass:
+    if can_admins_bypass != allow_admin_bypass:
+        current_state = "enabled" if can_admins_bypass else "disabled"
+        desired_state = "enabled" if allow_admin_bypass else "disabled"
         print(
-            f"❌ 'Allow administrators to bypass configured protection rules' is enabled for '{env_name}' (must be disabled)"
+            f"❌ 'Allow administrators to bypass configured protection rules' is {current_state} for '{env_name}' (must be {desired_state})"
         )
         changes_needed = True
     else:
-        print(f"✓ Administrator bypass is disabled for '{env_name}'")
+        state = "enabled" if allow_admin_bypass else "disabled"
+        print(f"✓ Administrator bypass is {state} for '{env_name}'")
 
     if needs_protection_update and not dry_run:
         all_logins = list(existing_reviewer_logins)
@@ -246,7 +231,7 @@ def ensure_required_reviewers(
                 }
                 for login in all_logins
             ],
-            "can_admins_bypass": False,
+            "can_admins_bypass": allow_admin_bypass,
             "deployment_branch_policy": None,
         }
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as f:
@@ -264,14 +249,16 @@ def ensure_required_reviewers(
             )
         for login in missing_reviewers:
             print(f"✓ Set required reviewer '{login}' for '{env_name}'")
-        if can_admins_bypass:
-            print(f"✓ Disabled administrator bypass for '{env_name}'")
+        if can_admins_bypass != allow_admin_bypass:
+            state = "enabled" if allow_admin_bypass else "disabled"
+            print(f"✓ Set administrator bypass to {state} for '{env_name}'")
 
     if needs_protection_update and dry_run:
         for login in missing_reviewers:
             print(f"  Would add required reviewer '{login}' to '{env_name}'")
-        if can_admins_bypass:
-            print(f"  Would disable administrator bypass for '{env_name}'")
+        if can_admins_bypass != allow_admin_bypass:
+            state = "enabled" if allow_admin_bypass else "disabled"
+            print(f"  Would set administrator bypass to {state} for '{env_name}'")
 
     return changes_needed
 
@@ -291,20 +278,22 @@ def configure_repository(repo: str, debusine_host: str, dry_run: bool, force: bo
     print("Checking repository prerequisites...")
     prereq_failures = False
 
+    required_visibility = CONFIG["prerequisites"]["visibility"]
     repo_info = get_repo_info(repo)
-    if repo_info.get("visibility") != "public":
-        print(f"❌ Repository is not public (visibility: {repo_info.get('visibility', 'unknown')})")
+    if repo_info.get("visibility") != required_visibility:
+        print(f"❌ Repository is not {required_visibility} (visibility: {repo_info.get('visibility', 'unknown')})")
         prereq_failures = True
     else:
-        print("✓ Repository is public")
+        print(f"✓ Repository is {required_visibility}")
 
     props = get_repo_custom_properties(repo)
-    if props.get("is-pkg-repo") != "true":
-        current = props.get("is-pkg-repo", "unset")
-        print(f"❌ Custom property 'is-pkg-repo' is not set to 'true' (current: {current})")
-        prereq_failures = True
-    else:
-        print("✓ Custom property 'is-pkg-repo' is set to 'true'")
+    for prop_name, expected_value in CONFIG["prerequisites"]["custom_properties"].items():
+        if props.get(prop_name) != expected_value:
+            current = props.get(prop_name, "unset")
+            print(f"❌ Custom property '{prop_name}' is not set to '{expected_value}' (current: {current})")
+            prereq_failures = True
+        else:
+            print(f"✓ Custom property '{prop_name}' is set to '{expected_value}'")
 
     if prereq_failures:
         if dry_run:
@@ -319,19 +308,20 @@ def configure_repository(repo: str, debusine_host: str, dry_run: bool, force: bo
     print()
 
     # 0. Check default branch
+    required_default_branch = CONFIG["default_branch"]
     default_branch = repo_info["default_branch"]
-    if default_branch != "qli-ci":
+    if default_branch != required_default_branch:
         print(
-            f"❌ Default branch is '{default_branch}', must be 'qli-ci'"
+            f"❌ Default branch is '{default_branch}', must be '{required_default_branch}'"
         )
         return 1
     else:
-        print("✓ Default branch is 'qli-ci'")
+        print(f"✓ Default branch is '{required_default_branch}'")
     print()
 
     # 1. Ensure all managed environments exist
     print("Checking environments...")
-    for env_name in MANAGED_ENVIRONMENTS:
+    for env_name in CONFIG["environments"]:
         env = get_environment(repo, env_name)
         if env is None:
             print(f"❌ Environment '{env_name}' does not exist")
@@ -350,7 +340,7 @@ def configure_repository(repo: str, debusine_host: str, dry_run: bool, force: bo
 
     required_vars = {
         "DEBUSINE_HOST": debusine_host,
-        "DEBUSINE_SCOPE": "qualcomm",
+        **CONFIG["variables"]["required"],
     }
 
     for var_name, expected_value in required_vars.items():
@@ -366,18 +356,18 @@ def configure_repository(repo: str, debusine_host: str, dry_run: bool, force: bo
         else:
             print(f"✓ Variable {var_name} is correctly set")
 
-    # 3. Ensure prohibited variable is not set
-    prohibited_var = "DEBUSINE_PARENT_WORKSPACE"
-    if prohibited_var in variables:
-        print(
-            f"❌ Variable {prohibited_var} should not be set (currently: {variables[prohibited_var]})"
-        )
-        changes_needed = True
-        if not dry_run:
-            delete_repo_variable(repo, prohibited_var, dry_run)
-            print(f"✓ Deleted {prohibited_var}")
-    else:
-        print(f"✓ Variable {prohibited_var} is not set")
+    # 3. Ensure prohibited variables are not set
+    for prohibited_var in CONFIG["variables"]["prohibited"]:
+        if prohibited_var in variables:
+            print(
+                f"❌ Variable {prohibited_var} should not be set (currently: {variables[prohibited_var]})"
+            )
+            changes_needed = True
+            if not dry_run:
+                delete_repo_variable(repo, prohibited_var, dry_run)
+                print(f"✓ Deleted {prohibited_var}")
+        else:
+            print(f"✓ Variable {prohibited_var} is not set")
 
     print()
 
@@ -388,34 +378,42 @@ def configure_repository(repo: str, debusine_host: str, dry_run: bool, force: bo
     # (as a needed change) rather than aborting, so all reviewer-enforced
     # environments are always checked/reported, even in --check mode when
     # some of them don't exist yet.
-    for index, (env_name, reviewers) in enumerate(REVIEWER_ENFORCED_ENVIRONMENTS.items()):
+    for index, (env_name, env_config) in enumerate(CONFIG["environments"].items()):
+        protection = env_config["protection"]
         if index > 0:
             print()
-        if ensure_required_reviewers(repo, env_name, reviewers, dry_run):
-            changes_needed = True
 
-    # Check Staging has no protection rules
-    staging_env = get_environment(repo, "Staging")
-    if staging_env is not None:
-        staging_rules = staging_env.get("protection_rules", [])
-        if staging_rules:
-            rule_types = [r.get("type", "unknown") for r in staging_rules]
-            print(f"❌ Environment 'Staging' has protection rules: {', '.join(rule_types)}")
-            changes_needed = True
-            if not dry_run:
-                payload = {"reviewers": [], "deployment_branch_policy": None}
-                with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as f:
-                    json.dump(payload, f)
-                    f.flush()
-                    run_gh_command([
-                        "api", f"repos/{repo}/environments/Staging",
-                        "-X", "PUT", "--input", f.name,
-                    ])
-                print("✓ Cleared protection rules from 'Staging' environment")
-            else:
-                print("  Would clear protection rules from 'Staging' environment")
-        else:
-            print("✓ Environment 'Staging' has no protection rules")
+        if protection["type"] == "required_reviewers":
+            if ensure_required_reviewers(
+                repo,
+                env_name,
+                protection["reviewers"],
+                protection["allow_admin_bypass"],
+                dry_run,
+            ):
+                changes_needed = True
+        elif protection["type"] == "none":
+            env = get_environment(repo, env_name)
+            if env is not None:
+                rules = env.get("protection_rules", [])
+                if rules:
+                    rule_types = [r.get("type", "unknown") for r in rules]
+                    print(f"❌ Environment '{env_name}' has protection rules: {', '.join(rule_types)}")
+                    changes_needed = True
+                    if not dry_run:
+                        payload = {"reviewers": [], "deployment_branch_policy": None}
+                        with tempfile.NamedTemporaryFile(mode="w", suffix=".json") as f:
+                            json.dump(payload, f)
+                            f.flush()
+                            run_gh_command([
+                                "api", f"repos/{repo}/environments/{env_name}",
+                                "-X", "PUT", "--input", f.name,
+                            ])
+                        print(f"✓ Cleared protection rules from '{env_name}' environment")
+                    else:
+                        print(f"  Would clear protection rules from '{env_name}' environment")
+                else:
+                    print(f"✓ Environment '{env_name}' has no protection rules")
 
     print()
 
@@ -466,7 +464,7 @@ def main():
         return 1
 
     # Get the debusine host for the selected environment
-    debusine_host = ENVIRONMENT_HOSTS[environment]
+    debusine_host = CONFIG["host_profiles"][environment]["DEBUSINE_HOST"]
 
     # Check gh authentication
     if not check_gh_auth():

@@ -17,6 +17,11 @@ then bring the implementation into sync with it. The tools in
 combination must have an effect on production repositories that matches
 what SPECIFICATION.md says.
 
+[`repo-configs.json`](repo-configs.json) holds the required settings,
+reviewers, and environment data that `configure-repo` checks and applies,
+as plain data — so it can be read without going through the script. It
+must stay in sync with the same facts described in SPECIFICATION.md.
+
 ## Prerequisites
 
 - `gh` CLI tool must be installed and authenticated (`gh auth login`)
