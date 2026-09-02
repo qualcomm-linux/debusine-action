@@ -22,6 +22,10 @@
       "DEBUSINE_PARENT_WORKSPACE"
     ]
   },
+  "organization_secrets": [
+    "DEB_PKG_BOT_CI_QSC_TOKEN",
+    "DEB_PKG_BOT_CI_TOKEN"
+  ],
   "environments": {
     "Production": {
       "protection": {
