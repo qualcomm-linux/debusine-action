@@ -24,6 +24,7 @@ Options:
 # it.
 
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -120,6 +121,56 @@ def get_visible_org_variables(repo: str) -> Dict[str, str]:
     )
     data = json.loads(stdout)
     return {var["name"]: var["value"] for var in data.get("variables", [])}
+
+
+def get_repo_branches(repo: str) -> List[str]:
+    """Get the names of all branches in the repository."""
+    stdout = run_gh_command(["api", f"repos/{repo}/branches", "--paginate"])
+    return [branch["name"] for branch in json.loads(stdout)]
+
+
+def build_packaging_branch_pattern(schema: Dict[str, Any]) -> re.Pattern:
+    """
+    Build the compiled regex matching valid packaging branch names from a
+    packaging_branch_schema config. Each entry in schema["shapes"] is a
+    '/'-joined template: the literal pair 'family/suite' expands to an
+    alternation over schema["families"] (suite must belong to its own
+    family), and '*' matches any single path segment (e.g. an arbitrary
+    prefix). This lets the branch name shape itself change via config,
+    without touching this code.
+    """
+    families = schema["families"]
+    family_suite_alternation = "|".join(
+        f"{re.escape(family)}/(?:{'|'.join(re.escape(suite) for suite in suites)})"
+        for family, suites in families.items()
+    )
+
+    shape_patterns = []
+    for shape in schema["shapes"]:
+        segments = shape.split("/")
+        parts = []
+        i = 0
+        while i < len(segments):
+            if segments[i:i + 2] == ["family", "suite"]:
+                parts.append(f"(?:{family_suite_alternation})")
+                i += 2
+            elif segments[i] == "*":
+                parts.append("[^/]+")
+                i += 1
+            else:
+                raise ValueError(f"unknown packaging branch shape segment: {segments[i]!r}")
+        shape_patterns.append("/".join(parts))
+
+    return re.compile(rf"^(?:{'|'.join(shape_patterns)})$")
+
+
+def is_packaging_branch_attempt(branch_name: str, families: Dict[str, List[str]]) -> bool:
+    """
+    A branch is treated as a packaging branch attempt (and therefore subject
+    to the naming schema) if any of its path segments names a known family,
+    regardless of position or suite validity.
+    """
+    return any(segment in families for segment in branch_name.split("/"))
 
 
 def set_repo_variable(repo: str, name: str, value: str, dry_run: bool) -> None:
@@ -470,6 +521,26 @@ def configure_repository(repo: str, debusine_host: str, dry_run: bool, force: bo
                         print(f"  Would clear protection rules from '{env_name}' environment")
                 else:
                     print(f"✓ Environment '{env_name}' has no protection rules")
+
+    print()
+
+    # 7. Check packaging branch naming
+    print("Checking packaging branch naming...")
+    packaging_branch_schema = CONFIG["packaging_branch_schema"]
+    families = packaging_branch_schema["families"]
+    pattern = build_packaging_branch_pattern(packaging_branch_schema)
+    packaging_branches_found = False
+    for branch_name in get_repo_branches(repo):
+        if not is_packaging_branch_attempt(branch_name, families):
+            continue
+        packaging_branches_found = True
+        if pattern.match(branch_name):
+            print(f"✓ Branch '{branch_name}' has a valid packaging branch name")
+        else:
+            print(f"❌ Branch '{branch_name}' does not have a valid packaging branch name")
+            changes_needed = True
+    if not packaging_branches_found:
+        print("✓ No packaging branches found")
 
     print()
 

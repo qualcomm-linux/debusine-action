@@ -31,6 +31,23 @@
     "DEB_PKG_BOT_CI_NAME": "GitHub Service Bot",
     "DEB_PKG_BOT_CI_USERNAME": "qcom-service-bot"
   },
+  "packaging_branch_schema": {
+    "families": {
+      "debian": [
+        "trixie",
+        "latest",
+        "unstable",
+        "sid"
+      ],
+      "ubuntu": [
+        "resolute"
+      ]
+    },
+    "shapes": [
+      "family/suite",
+      "*/family/suite"
+    ]
+  },
   "environments": {
     "Production": {
       "protection": {
