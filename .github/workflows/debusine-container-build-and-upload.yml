@@ -34,6 +34,8 @@ env:
 jobs:
   build-debian:
     name: Build ${{ matrix.suite }} image
+    # Publishes to ghcr.io/qualcomm-linux, which a fork cannot write to.
+    if: github.repository_owner == 'qualcomm-linux'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

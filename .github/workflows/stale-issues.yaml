@@ -9,6 +9,8 @@ permissions:
 
 jobs:
   stale:
+    # Only manage staleness on the canonical repo, not in forks.
+    if: github.repository_owner == 'qualcomm-linux'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/stale@v10
