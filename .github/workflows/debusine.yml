@@ -265,6 +265,31 @@ jobs:
         run: |
           debusine-action/lib/generate-step-summary
 
+      - name: Generate sources tar
+        env:
+          DEBUSINE_HOST: ${{ vars.DEBUSINE_HOST }}
+          DEBUSINE_SCOPE: ${{ vars.DEBUSINE_SCOPE }}
+          DEBUSINE_USER: ${{ secrets.DEBUSINE_USER }}
+          DEBUSINE_TOKEN: ${{ secrets.DEBUSINE_TOKEN }}
+          DEBUSINE_WORKSPACE: ${{ steps.build.outputs.workspace }}
+          DEBUSINE_TARGET_WORKSPACE: ${{ needs.resolve.outputs.debusine_target_workspace }}
+          SUITE: ${{ needs.resolve.outputs.suite }}
+          SRCPKG_NAME: ${{ needs.source-package.outputs.srcpkg_name }}
+          SRCPKG_VERSION: ${{ needs.source-package.outputs.srcpkg_version }}
+          TARGET_BRANCH: ${{ inputs.target_branch }}
+          JOB_INDEX: ${{ inputs.job_index }}
+        run: |
+          debusine-action/lib/generate-sources-tar
+
+      - name: Upload metadata
+        uses: actions/upload-artifact@v7
+        with:
+          name: metadata-${{ inputs.job_index }}
+          path: |
+            *.sources
+            metadata.json
+          if-no-files-found: error
+
   AXIOM_Check:
     name: AXIOM Check
     if: ${{ vars.AXIOM_ENABLE == 'true' &&  (vars[format('AXIOM_ENABLE_{0}', inputs.workflow_kind)] == 'true')}}
