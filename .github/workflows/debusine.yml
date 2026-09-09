@@ -277,14 +277,13 @@ jobs:
           SRCPKG_NAME: ${{ needs.source-package.outputs.srcpkg_name }}
           SRCPKG_VERSION: ${{ needs.source-package.outputs.srcpkg_version }}
           TARGET_BRANCH: ${{ inputs.target_branch }}
-          JOB_INDEX: ${{ inputs.job_index }}
         run: |
           debusine-action/lib/generate-sources-tar
 
       - name: Upload metadata
         uses: actions/upload-artifact@v7
         with:
-          name: metadata-${{ inputs.job_index }}
+          name: metadata-${{ needs.resolve.outputs.suite }}
           path: |
             *.sources
             metadata.json

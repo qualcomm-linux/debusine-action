@@ -32,7 +32,6 @@ set -ex
 #   SRCPKG_NAME
 #   SRCPKG_VERSION
 #   TARGET_BRANCH
-#   JOB_INDEX
 #   signing-key.asc: the signing key for DEBUSINE_WORKSPACE in the current
 #     directory (produced by lib/build; used instead of fetching it here to
 #     avoid the empty-key race).
@@ -40,8 +39,8 @@ set -ex
 # Outputs:
 #   ${DEBUSINE_TARGET_WORKSPACE}.sources, qli-ci.sources: apt .sources files
 #   metadata.json: standalone JSON describing the source package/version/suite,
-#     plus the target branch and job index that identify which matrix expansion
-#     (and therefore which uploaded metadata-${JOB_INDEX} artifact) this is
+#     plus the target branch. Uploaded per-suite as the metadata-${SUITE}
+#     artifact.
 
 . "$(dirname "$0")/sources-common.sh"
 
@@ -49,7 +48,7 @@ emit_sources "${DEBUSINE_TARGET_WORKSPACE}" > "${DEBUSINE_TARGET_WORKSPACE}.sour
 emit_sources "${DEBUSINE_WORKSPACE}" signing-key.asc > qli-ci.sources
 
 SRCPKG_NAME="$SRCPKG_NAME" SRCPKG_VERSION="$SRCPKG_VERSION" SUITE="$SUITE" \
-TARGET_BRANCH="${TARGET_BRANCH-}" JOB_INDEX="${JOB_INDEX-0}" \
+TARGET_BRANCH="${TARGET_BRANCH-}" \
 python3 - metadata.json <<'PY'
 import json
 import os
@@ -60,7 +59,6 @@ data = {
     "version": os.environ["SRCPKG_VERSION"],
     "suite": os.environ["SUITE"],
     "target-branch": os.environ["TARGET_BRANCH"],
-    "job-index": os.environ["JOB_INDEX"],
 }
 
 with open(sys.argv[1], "w") as f:
