@@ -66,6 +66,12 @@ ENVIRONMENT_HOSTS = {
     "stage": "stage.debusine.qualcomm.com",
 }
 
+# Organization-level secrets that must be visible to the repository. This
+# tool grants access automatically if the caller's own gh auth carries the
+# admin:org scope; otherwise granting fails and is reported, since that
+# requires org admin access this tool may not have.
+REQUIRED_ORG_SECRETS = ["DEB_PKG_BOT_CI_QSC_TOKEN", "DEB_PKG_BOT_CI_TOKEN"]
+
 
 def run_gh_command(args: List[str]) -> str:
     """Run a gh CLI command and return stdout. Raises CalledProcessError on failure."""
@@ -129,6 +135,37 @@ def get_repo_variables(repo: str) -> Dict[str, str]:
     stdout = run_gh_command(["api", f"repos/{repo}/actions/variables"])
     data = json.loads(stdout)
     return {var["name"]: var["value"] for var in data.get("variables", [])}
+
+
+def get_visible_org_secrets(repo: str) -> List[str]:
+    """Get names of organization-level secrets visible to this repository."""
+    stdout = run_gh_command(
+        [
+            "api",
+            "--paginate",
+            f"repos/{repo}/actions/organization-secrets",
+            "-q",
+            ".secrets[].name",
+        ]
+    )
+    # Splitting on whitespace relies on secret names never containing spaces.
+    # GitHub enforces this itself (secret names may only contain alphanumeric
+    # characters and underscores), but this parsing is fragile if that were
+    # ever not the case.
+    return stdout.split()
+
+
+def grant_org_secret_access(repo: str, secret_name: str, repo_id: int) -> None:
+    """
+    Grant this repository access to a 'selected'-visibility organization
+    secret. Only adds this one repository to the secret's existing access
+    list - never replaces it, and never touches the secret's value. Requires
+    the caller's own gh auth to carry the admin:org scope.
+    """
+    org = repo.split("/")[0]
+    run_gh_command(
+        ["api", f"orgs/{org}/actions/secrets/{secret_name}/repositories/{repo_id}", "-X", "PUT"]
+    )
 
 
 def set_repo_variable(repo: str, name: str, value: str, dry_run: bool) -> None:
@@ -425,6 +462,33 @@ def configure_repository(repo: str, debusine_host: str, dry_run: bool, force: bo
                 print("  Would clear protection rules from 'Staging' environment")
         else:
             print("✓ Environment 'Staging' has no protection rules")
+
+    print()
+
+    # 5. Check organization secret visibility
+    print("Checking organization secret visibility...")
+    visible_org_secrets = get_visible_org_secrets(repo)
+    for secret_name in REQUIRED_ORG_SECRETS:
+        if secret_name in visible_org_secrets:
+            print(f"✓ Organization secret '{secret_name}' is visible to this repository")
+            continue
+
+        print(f"❌ Organization secret '{secret_name}' is not visible to this repository")
+        changes_needed = True
+
+        if dry_run:
+            print(f"  Would grant repository access to {secret_name}")
+            continue
+
+        try:
+            grant_org_secret_access(repo, secret_name, repo_info["id"])
+            print(f"✓ Granted repository access to {secret_name}")
+        except subprocess.CalledProcessError:
+            print(
+                f"❌ Could not grant access to {secret_name} "
+                "(requires org admin access with the admin:org scope) - "
+                "an org admin must grant it manually"
+            )
 
     print()
 

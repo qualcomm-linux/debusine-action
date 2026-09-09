@@ -72,7 +72,15 @@ debusine-action workflows.
 
 **What it configures:**
 
-Settings defined in SPECIFICATION.md apart from secrets.
+Settings defined in SPECIFICATION.md apart from secret *values* —
+including granting this repository access to the required
+organization-level secrets (see "Organization Secret Visibility" in
+SPECIFICATION.md). Granting that access is a GitHub ACL change, not a
+secret value, so it lives here rather than in `set-repo-secrets`, which
+is reserved for tools/workflows that need to read actual secret values
+(e.g. from a password vault). Requires the caller's own `gh` auth to
+carry the `admin:org` scope; if it doesn't, granting fails and is
+reported, without blocking the rest of what this tool configures.
 
 **Examples:**
 ```bash
@@ -85,8 +93,10 @@ Settings defined in SPECIFICATION.md apart from secrets.
 
 ### set-repo-secrets
 
-Sets the required secrets for a GitHub repository used by
-debusine-action workflows.
+Sets the required secret *values* for a GitHub repository used by
+debusine-action workflows (as opposed to `configure-repo`, which
+handles GitHub-side settings and ACLs, including organization secret
+visibility, without ever needing to know a secret's value).
 
 **Usage:**
 ```bash
@@ -115,6 +125,12 @@ Without `--check`, the tool prompts for four secrets:
    release operations
 4. **DEBUSINE_RELEASE_TOKEN** (Staging environment): Token for release
    operations
+
+It also grants the repository access to the organization-level secrets
+`DEB_PKG_BOT_CI_QSC_TOKEN` and `DEB_PKG_BOT_CI_TOKEN`, if not already
+visible to it. This requires the caller's own `gh` auth to carry the
+`admin:org` scope; if it doesn't, granting fails and is reported, but
+doesn't block setting the other secrets.
 
 **Note:** Run `configure-repo` first to ensure the Production
 environment exists.

@@ -58,6 +58,23 @@ The following repository-level Actions secrets must be set:
 | `DEBUSINE_USER`  | Debusine user identity            |
 | `DEBUSINE_TOKEN` | Debusine API authentication token |
 
+### Organization Secret Visibility
+
+The following organization-level Actions secrets are managed centrally
+and must be visible to the repository — i.e. the secret's organization
+visibility setting must be "All repositories", or "Selected
+repositories" with this repository selected:
+
+| Secret                     | Purpose                                                                          |
+|----------------------------|-----------------------------------------------------------------------------------|
+| `DEB_PKG_BOT_CI_QSC_TOKEN` | QArtifactory API key used for Ubuntu apt artifactory uploads during release      |
+| `DEB_PKG_BOT_CI_TOKEN`     | Bot token used by reusable workflows/scripts to clone internal repositories and perform authenticated write operations |
+
+Granting visibility is an organization-level change that requires org
+admin access. `configure-repo` grants it automatically if the caller's
+own `gh` auth carries the `admin:org` scope; if it doesn't, granting
+fails and is reported so an org admin can grant it manually.
+
 ### GitHub Environment: Production
 
 A GitHub Actions environment named `Production` must exist with the
