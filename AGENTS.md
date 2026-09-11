@@ -24,7 +24,6 @@ For current Qualcomm Linux package CI/release behavior, treat these as active:
 - `.github/workflows/debusine.yml`
 - `lib/*` helper scripts called by that reusable workflow
 - `Dockerfiles/debusine-builder/*`
-- `tools/update-workflow-files` and related tool docs/specification
 
 Top-level composite action files (`action.yml`, `setup/`, `import-artifact/`,
 `run-workflow/`) still exist, but they are not the primary source of truth for
@@ -146,8 +145,8 @@ This fixed earlier missing-orig-tarball and path-restoration issues.
 
 - Source workflow stubs live in
   `qualcomm-linux/qli-ci/pkg-workflows/debusine/`.
-- `tools/update-workflow-files` syncs those stubs into managed `pkg-*`
-  repositories.
+- `qualcomm-linux/qli-ci`'s own `tools/update-workflow-files` syncs those
+  stubs into managed `pkg-*` repositories.
 - Changes to workflow contracts should update qli-ci stubs and downstream copies
   together.
 
@@ -216,9 +215,6 @@ Known pattern:
 
 - `.github/workflows/debusine.yml`
 - `.github/workflows/debusine-container-build-and-upload.yml`
-- `tools/update-workflow-files`
-- `tools/README.md`
-- `tools/SPECIFICATION.md`
 - `Dockerfiles/debusine-builder/Dockerfile`
 - `Dockerfiles/debusine-builder/base-packages.txt`
 - `lib/build`
