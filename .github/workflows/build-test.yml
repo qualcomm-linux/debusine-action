@@ -14,6 +14,9 @@ permissions:
   
 jobs:
   build-and-test:
+    # Needs DEBUSINE_TOKEN and access to test.debusine.qualcomm.com, so it
+    # cannot work in a fork.
+    if: github.repository_owner == 'qualcomm-linux'
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/qualcomm-linux/debusine-pkg-builder:trixie
