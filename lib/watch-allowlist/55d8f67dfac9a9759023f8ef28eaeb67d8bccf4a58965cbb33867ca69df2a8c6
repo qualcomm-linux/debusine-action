@@ -1,4 +1,0 @@
-version=4
-opts="filenamemangle=s/.+\/v?([\d.]+)\.tar\.gz/qtee-tas-$1.tar.gz/" \
-	https://github.com/qualcomm/qtee-tas/tags \
-	.*/v?([\d.]+)\.tar\.gz
