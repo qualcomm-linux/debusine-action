@@ -79,7 +79,9 @@ jobs:
         with:
           path: srcpkg
           ref: ${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
+          # lib/generate-source-package runs `git fetch origin` for
+          # pristine-tar/upstream refs. The token is this run's own read-only
+          # one (no secrets in fork PR runs), same as the trusted path today.
       - uses: actions/checkout@v6
         with:
           repository: qualcomm-linux/debusine-action
