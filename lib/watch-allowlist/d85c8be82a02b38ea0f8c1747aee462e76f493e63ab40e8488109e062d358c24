@@ -1,0 +1,6 @@
+version=4
+opts=searchmode=plain,\
+downloadurlmangle=s%/api/storage/qsc_releases-cache/%/qsc_releases/%,\
+filenamemangle=s/qcom-adreno/adreno/; \
+https://qartifactory-edge.qualcomm.com/artifactory/api/search/artifact?name=adreno&repos=qsc_releases-cache \
+https://qartifactory-edge.qualcomm.com/artifactory/api/storage/qsc_releases-cache/software/chip/component/gfx-adreno\.le\.0\.0/[\d.]+/prebuilt_trixie/adreno_@ANY_VERSION@_arm64.tar.gz
